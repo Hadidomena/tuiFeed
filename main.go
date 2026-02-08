@@ -10,7 +10,21 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 )
 
-func returnPost(ctx context.Context, client *xrpc.Client, postUrl string) (*bsky.FeedGetPostThread_Output, error) {
+func strVal(v interface{}) string {
+	switch s := v.(type) {
+	case *string:
+		if s == nil {
+			return ""
+		}
+		return *s
+	case string:
+		return s
+	default:
+		return ""
+	}
+}
+
+func returnThread(ctx context.Context, client *xrpc.Client, postUrl string) (*bsky.FeedGetPostThread_Output, error) {
 	parts := strings.Split(postUrl, "/")
 	if len(parts) < 7 {
 		panic("Invalid post URL format")
@@ -33,6 +47,22 @@ func returnPost(ctx context.Context, client *xrpc.Client, postUrl string) (*bsky
 	return threadOutput, nil
 }
 
+func getExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
+	result := []string{}
+
+	if Post.Embed != nil && Post.Embed.EmbedImages_View != nil {
+		for _, img := range Post.Embed.EmbedImages_View.Images {
+			result = append(result, img.Fullsize)
+		}
+	}
+
+	if Post.Embed != nil && Post.Embed.EmbedVideo_View != nil {
+		result = append(result, Post.Embed.EmbedVideo_View.Playlist)
+	}
+
+	return result
+}
+
 func main() {
 	postUrl := "https://bsky.app/profile/p-e-g-76.bsky.social/post/3mcncopydnc2g"
 	ctx := context.Background()
@@ -40,7 +70,7 @@ func main() {
 		Host: "https://public.api.bsky.app",
 	}
 
-	threadOutput, err := returnPost(ctx, client, postUrl)
+	threadOutput, err := returnThread(ctx, client, postUrl)
 	if err != nil {
 		panic(fmt.Errorf("error fetching post: %w", err))
 	}
@@ -54,16 +84,18 @@ func main() {
 			parentRecord := parentPost.Record.Val.(*bsky.FeedPost)
 
 			fmt.Println("--- PARENT POST (REPLY TO) ---")
-			fmt.Printf("Author: %s (@%s)\n", parentPost.Author.DisplayName, parentPost.Author.Handle)
-			fmt.Printf("Content: %s\n", parentRecord.Text)
+			fmt.Printf("Author: %s (@%s)\n", strVal(parentPost.Author.DisplayName), strVal(parentPost.Author.Handle))
+			fmt.Printf("Content: %s\n", strVal(parentRecord.Text))
 			fmt.Printf("❤️  %d | 💬 %d\n\n", *parentPost.LikeCount, *parentPost.ReplyCount)
+			fmt.Printf("Embeds: %+v\n", getExtantEmbeds(parentPost))
 		}
 
 		fmt.Println("--- FOUND POST ---")
-		fmt.Printf("Author: %s (@%s)\n", post.Author.DisplayName, post.Author.Handle)
-		fmt.Printf("Content: %s\n", record.Text)
+		fmt.Printf("Author: %s (@%s)\n", strVal(post.Author.DisplayName), strVal(post.Author.Handle))
+		fmt.Printf("Content: %s\n", strVal(record.Text))
 		fmt.Printf("Likes: %d\n", *post.LikeCount)
-		fmt.Printf("Date:  %s\n", record.CreatedAt)
+		fmt.Printf("Date:  %s\n", strVal(record.CreatedAt))
+		fmt.Printf("Embeds: %+v\n", getExtantEmbeds(post))
 
 		if len(threadView.Replies) > 0 {
 			fmt.Printf("\n--- REPLIES (%d) ---\n", len(threadView.Replies))
@@ -72,8 +104,8 @@ func main() {
 					replyPost := reply.FeedDefs_ThreadViewPost.Post
 					replyRecord := replyPost.Record.Val.(*bsky.FeedPost)
 
-					fmt.Printf("\n[%d] %s (@%s):\n", i+1, replyPost.Author.DisplayName, replyPost.Author.Handle)
-					fmt.Printf("    %s\n", replyRecord.Text)
+					fmt.Printf("\n[%d] %s (@%s):\n", i+1, strVal(replyPost.Author.DisplayName), strVal(replyPost.Author.Handle))
+					fmt.Printf("    %s\n", strVal(replyRecord.Text))
 					fmt.Printf("    ❤️ %d | 💬 %d\n", *replyPost.LikeCount, *replyPost.ReplyCount)
 				}
 			}
