@@ -13,25 +13,26 @@ import (
 func returnPost(ctx context.Context, client *xrpc.Client, postUrl string) (*bsky.FeedGetPostThread_Output, error) {
 	parts := strings.Split(postUrl, "/")
 	if len(parts) < 7 {
-		panic("Nieprawidłowy format linku")
+		panic("Invalid post URL format")
 	}
 	handle := parts[4]
 	rkey := parts[6]
 
 	resolveOutput, err := atproto.IdentityResolveHandle(ctx, client, handle)
 	if err != nil {
-		panic(fmt.Errorf("błąd rozwiązywania użytkownika: %w", err))
+		panic(fmt.Errorf("error resolving user: %w", err))
 	}
 	did := resolveOutput.Did
 	atURI := fmt.Sprintf("at://%s/app.bsky.feed.post/%s", did, rkey)
 
 	threadOutput, err := bsky.FeedGetPostThread(ctx, client, 0, 0, atURI)
 	if err != nil {
-		panic(fmt.Errorf("nie znaleziono posta: %w", err))
+		panic(fmt.Errorf("post not found: %w", err))
 	}
 
 	return threadOutput, nil
 }
+
 func main() {
 	postUrl := "https://bsky.app/profile/p-e-g-76.bsky.social/post/3mcncopydnc2g"
 	ctx := context.Background()
@@ -41,34 +42,31 @@ func main() {
 
 	threadOutput, err := returnPost(ctx, client, postUrl)
 	if err != nil {
-		panic(fmt.Errorf("błąd podczas pobierania posta: %w", err))
+		panic(fmt.Errorf("error fetching post: %w", err))
 	}
 
 	if threadOutput.Thread.FeedDefs_ThreadViewPost != nil {
 		threadView := threadOutput.Thread.FeedDefs_ThreadViewPost
 		post := threadView.Post
-		record := post.Record.Val.(*bsky.FeedPost) // Rzutowanie na konkretny typ posta
-
-		// 6a. Wyświetlanie posta nadrzędnego (jeśli to odpowiedź)
+		record := post.Record.Val.(*bsky.FeedPost)
 		if threadView.Parent != nil && threadView.Parent.FeedDefs_ThreadViewPost != nil {
 			parentPost := threadView.Parent.FeedDefs_ThreadViewPost.Post
 			parentRecord := parentPost.Record.Val.(*bsky.FeedPost)
 
-			fmt.Println("--- POST NADRZĘDNY (ODPOWIADA NA) ---")
-			fmt.Printf("Autor: %s (@%s)\n", parentPost.Author.DisplayName, parentPost.Author.Handle)
-			fmt.Printf("Treść: %s\n", parentRecord.Text)
+			fmt.Println("--- PARENT POST (REPLY TO) ---")
+			fmt.Printf("Author: %s (@%s)\n", parentPost.Author.DisplayName, parentPost.Author.Handle)
+			fmt.Printf("Content: %s\n", parentRecord.Text)
 			fmt.Printf("❤️  %d | 💬 %d\n\n", *parentPost.LikeCount, *parentPost.ReplyCount)
 		}
 
-		fmt.Println("--- ZNALEZIONO POST ---")
-		fmt.Printf("Autor: %s (%s)\n", post.Author.DisplayName, post.Author.Handle)
-		fmt.Printf("Treść: %s\n", record.Text)
-		fmt.Printf("Lajki: %d\n", *post.LikeCount)
-		fmt.Printf("Data:  %s\n", record.CreatedAt)
+		fmt.Println("--- FOUND POST ---")
+		fmt.Printf("Author: %s (@%s)\n", post.Author.DisplayName, post.Author.Handle)
+		fmt.Printf("Content: %s\n", record.Text)
+		fmt.Printf("Likes: %d\n", *post.LikeCount)
+		fmt.Printf("Date:  %s\n", record.CreatedAt)
 
-		// 7. Wyświetlanie odpowiedzi
 		if len(threadView.Replies) > 0 {
-			fmt.Printf("\n--- ODPOWIEDZI (%d) ---\n", len(threadView.Replies))
+			fmt.Printf("\n--- REPLIES (%d) ---\n", len(threadView.Replies))
 			for i, reply := range threadView.Replies {
 				if reply.FeedDefs_ThreadViewPost != nil {
 					replyPost := reply.FeedDefs_ThreadViewPost.Post
@@ -80,9 +78,9 @@ func main() {
 				}
 			}
 		} else {
-			fmt.Println("\nBrak odpowiedzi.")
+			fmt.Println("\nNo replies.")
 		}
 	} else {
-		fmt.Println("Nie udało się odczytać szczegółów posta.")
+		fmt.Println("Failed to read post details.")
 	}
 }
