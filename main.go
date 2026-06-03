@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	utils "github.com/Hadidomena/tuiFeed/utils"
 	"os"
 	"strings"
 
@@ -107,20 +108,6 @@ func (m model) View() tea.View {
 	return tea.NewView(s)
 }
 
-func strVal(v interface{}) string {
-	switch s := v.(type) {
-	case *string:
-		if s == nil {
-			return ""
-		}
-		return *s
-	case string:
-		return s
-	default:
-		return ""
-	}
-}
-
 func returnThread(ctx context.Context, client *xrpc.Client, postUrl string) (*bsky.FeedGetPostThread_Output, error) {
 	parts := strings.Split(postUrl, "/")
 	if len(parts) < 7 {
@@ -181,17 +168,17 @@ func main() {
 			parentRecord := parentPost.Record.Val.(*bsky.FeedPost)
 
 			fmt.Println("--- PARENT POST (REPLY TO) ---")
-			fmt.Printf("Author: %s (@%s)\n", strVal(parentPost.Author.DisplayName), strVal(parentPost.Author.Handle))
-			fmt.Printf("Content: %s\n", strVal(parentRecord.Text))
+			fmt.Printf("Author: %s (@%s)\n", utils.StrVal(parentPost.Author.DisplayName), utils.StrVal(parentPost.Author.Handle))
+			fmt.Printf("Content: %s\n", utils.StrVal(parentRecord.Text))
 			fmt.Printf("❤️  %d | 💬 %d\n\n", *parentPost.LikeCount, *parentPost.ReplyCount)
 			fmt.Printf("Embeds: %+v\n", getExtantEmbeds(parentPost))
 		}
 
 		fmt.Println("--- FOUND POST ---")
-		fmt.Printf("Author: %s (@%s)\n", strVal(post.Author.DisplayName), strVal(post.Author.Handle))
-		fmt.Printf("Content: %s\n", strVal(record.Text))
+		fmt.Printf("Author: %s (@%s)\n", utils.StrVal(post.Author.DisplayName), utils.StrVal(post.Author.Handle))
+		fmt.Printf("Content: %s\n", utils.StrVal(record.Text))
 		fmt.Printf("Likes: %d\n", *post.LikeCount)
-		fmt.Printf("Date:  %s\n", strVal(record.CreatedAt))
+		fmt.Printf("Date:  %s\n", utils.StrVal(record.CreatedAt))
 		fmt.Printf("Embeds: %+v\n", getExtantEmbeds(post))
 
 		if len(threadView.Replies) > 0 {
@@ -201,8 +188,8 @@ func main() {
 					replyPost := reply.FeedDefs_ThreadViewPost.Post
 					replyRecord := replyPost.Record.Val.(*bsky.FeedPost)
 
-					fmt.Printf("\n[%d] %s (@%s):\n", i+1, strVal(replyPost.Author.DisplayName), strVal(replyPost.Author.Handle))
-					fmt.Printf("    %s\n", strVal(replyRecord.Text))
+					fmt.Printf("\n[%d] %s (@%s):\n", i+1, utils.StrVal(replyPost.Author.DisplayName), utils.StrVal(replyPost.Author.Handle))
+					fmt.Printf("    %s\n", utils.StrVal(replyRecord.Text))
 					fmt.Printf("    ❤️ %d | 💬 %d\n", *replyPost.LikeCount, *replyPost.ReplyCount)
 				}
 			}
