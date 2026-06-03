@@ -4,7 +4,20 @@ import (
 	"testing"
 )
 
-func testStrVal(t *testing.T) {
+func TestStringPtr(t *testing.T) {
+	// Arrange
+	str := "some String"
+
+	// Act
+	res := StringPtr(str)
+
+	// Assert
+	if str != *res {
+		t.Fatalf("Incorrect string returned")
+	}
+}
+
+func TestStrVal(t *testing.T) {
 	// Arrange
 	str := "Some text for flavour"
 	pointer := StringPtr("Some text for flavour")
