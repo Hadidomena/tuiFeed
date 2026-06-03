@@ -1,11 +1,13 @@
-module PostMap
+module github.com/Hadidomena/tuiFeed
 
 go 1.25.11
 
-require github.com/bluesky-social/indigo v0.0.0-20260114211028-207c9d49d0de
+require (
+	charm.land/bubbletea/v2 v2.0.7
+	github.com/bluesky-social/indigo v0.0.0-20260114211028-207c9d49d0de
+)
 
 require (
-	charm.land/bubbletea/v2 v2.0.7 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260525132238-948f4557a654 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
