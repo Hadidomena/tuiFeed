@@ -7,24 +7,31 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-type model struct {
+type sessionState int
+
+const (
+	showDashboardView sessionState = iota
+	// showFormView
+)
+
+type DashboardModel struct {
 	choices  []string
 	cursor   int
 	selected map[int]struct{}
 }
 
-func initialModel() model {
-	return model{
+func NewDashboardModel() DashboardModel {
+	return DashboardModel{
 		choices:  []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
 		selected: make(map[int]struct{}),
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m DashboardModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -39,8 +46,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter", "space":
-			_, ok := m.selected[m.cursor]
-			if ok {
+			if _, ok := m.selected[m.cursor]; ok {
 				delete(m.selected, m.cursor)
 			} else {
 				m.selected[m.cursor] = struct{}{}
@@ -50,7 +56,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() tea.View {
+func (m DashboardModel) View() tea.View {
 	s := "What should we buy at the market?\n\n"
 	for i, choice := range m.choices {
 		cursor := " "
@@ -67,8 +73,47 @@ func (m model) View() tea.View {
 	return tea.NewView(s)
 }
 
+// MainModel stores Types of sub-models
+type MainModel struct {
+	state     sessionState
+	dashboard DashboardModel
+}
+
+func NewMainModel() MainModel {
+	return MainModel{
+		state:     showDashboardView,
+		dashboard: NewDashboardModel(),
+	}
+}
+
+func (m MainModel) Init() tea.Cmd {
+	return m.dashboard.Init()
+}
+
+func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch m.state {
+	case showDashboardView:
+		updatedModel, dashboardCmd := m.dashboard.Update(msg)
+		m.dashboard = updatedModel.(DashboardModel)
+		cmd = dashboardCmd
+	}
+
+	return m, cmd
+}
+
+func (m MainModel) View() tea.View {
+	switch m.state {
+	case showDashboardView:
+		return m.dashboard.View()
+	default:
+		return tea.NewView("Unknown state")
+	}
+}
+
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(NewMainModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
