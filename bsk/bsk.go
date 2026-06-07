@@ -3,11 +3,20 @@ package bsk
 import (
 	"context"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
+	"net/http"
+	"os"
 	"strings"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/srlehn/termimg"
+	_ "github.com/srlehn/termimg/drawers/all"
 )
 
 type PostInfo struct {
@@ -108,6 +117,51 @@ func GetExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
 		result = append(result, Post.Embed.EmbedVideo_View.Playlist)
 	}
 	return result
+}
+
+func PrintPost(post PostInfo) error {
+	fmt.Printf("─── %s (@%s) ───\n", post.AuthorDisplayName, post.AuthorHandle)
+	fmt.Printf("❤️ %d  💬 %d  📅 %s\n", post.LikeCount, post.ReplyCount, post.CreatedAt)
+	fmt.Println()
+	fmt.Println(post.Text)
+	fmt.Println()
+
+	if len(post.Embeds) > 0 {
+		fmt.Println("── Attachments ──")
+		for i, embed := range post.Embeds {
+			fmt.Printf("[%d/%d]\n", i+1, len(post.Embeds))
+			if err := renderImage(embed); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func renderImage(url string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read failed: %w", err)
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "image/") {
+		return fmt.Errorf("not an image: %s", ct)
+	}
+
+	bounds := image.Rect(0, 0, 40, 20)
+	if err := termimg.DrawBytes(data, bounds); err != nil {
+		return fmt.Errorf("display failed: %w", err)
+	}
+
+	return nil
 }
 
 func int64Val(p *int64) int64 {
