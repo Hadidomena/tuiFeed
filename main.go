@@ -5,14 +5,19 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Hadidomena/tuiFeed/follows"
 )
 
 type sessionState int
 
 const (
 	showDashboardView sessionState = iota
+	showFollowsView
 	// showFormView
 )
+
+type OpenFollowsMsg struct{}
 
 type DashboardModel struct {
 	choices  []string
@@ -22,7 +27,7 @@ type DashboardModel struct {
 
 func NewDashboardModel() DashboardModel {
 	return DashboardModel{
-		choices:  []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
+		choices:  []string{"Manage follows", "Buy celery", "Buy kohlrabi"},
 		selected: make(map[int]struct{}),
 	}
 }
@@ -46,6 +51,9 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter", "space":
+			if m.cursor == 0 {
+				return m, func() tea.Msg { return OpenFollowsMsg{} }
+			}
 			if _, ok := m.selected[m.cursor]; ok {
 				delete(m.selected, m.cursor)
 			} else {
@@ -77,12 +85,18 @@ func (m DashboardModel) View() tea.View {
 type MainModel struct {
 	state     sessionState
 	dashboard DashboardModel
+	follows   follows.Model
 }
 
 func NewMainModel() MainModel {
+	fm, err := follows.NewModel()
+	if err != nil {
+		fm, _ = follows.NewModel()
+	}
 	return MainModel{
 		state:     showDashboardView,
 		dashboard: NewDashboardModel(),
+		follows:   fm,
 	}
 }
 
@@ -93,11 +107,28 @@ func (m MainModel) Init() tea.Cmd {
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	switch msg.(type) {
+	case OpenFollowsMsg:
+		m.state = showFollowsView
+		fm, err := follows.NewModel()
+		if err == nil {
+			m.follows = fm
+		}
+		return m, m.follows.Init()
+	case follows.BackMsg:
+		m.state = showDashboardView
+		return m, nil
+	}
+
 	switch m.state {
 	case showDashboardView:
 		updatedModel, dashboardCmd := m.dashboard.Update(msg)
 		m.dashboard = updatedModel.(DashboardModel)
 		cmd = dashboardCmd
+	case showFollowsView:
+		updatedModel, followsCmd := m.follows.Update(msg)
+		m.follows = updatedModel.(follows.Model)
+		cmd = followsCmd
 	}
 
 	return m, cmd
@@ -107,6 +138,8 @@ func (m MainModel) View() tea.View {
 	switch m.state {
 	case showDashboardView:
 		return m.dashboard.View()
+	case showFollowsView:
+		return m.follows.View()
 	default:
 		return tea.NewView("Unknown state")
 	}
