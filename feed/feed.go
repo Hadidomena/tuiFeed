@@ -13,28 +13,19 @@ import (
 	"github.com/Hadidomena/tuiFeed/config"
 )
 
-var Program *tea.Program
-
 type BackMsg struct{}
 
 type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
 
-type imageRenderedMsg struct {
-	index int
-	fails int
-}
-
 type Model struct {
-	cfg        *config.Config
-	client     *xrpc.Client
-	posts      []bsk.FeedItem
-	cursor     int
-	loading    bool
-	statusMsg  string
-	imageFails map[int]int
-	rendered   map[int]bool
+	cfg       *config.Config
+	client    *xrpc.Client
+	posts     []bsk.FeedItem
+	cursor    int
+	loading   bool
+	statusMsg string
 }
 
 func NewModel() (Model, error) {
@@ -43,11 +34,9 @@ func NewModel() (Model, error) {
 		return Model{}, err
 	}
 	return Model{
-		cfg:        cfg,
-		client:     bsk.NewClient(),
-		loading:    true,
-		imageFails: make(map[int]int),
-		rendered:   make(map[int]bool),
+		cfg:     cfg,
+		client:  bsk.NewClient(),
+		loading: true,
 	}, nil
 }
 
@@ -89,35 +78,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
-				return m, m.renderCursorImages
 			}
 		case "down", "j":
 			if m.cursor < len(m.posts)-1 {
 				m.cursor++
-				return m, m.renderCursorImages
+			}
+		case "a":
+			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
+				m.statusMsg = "Rendering images..."
+				return m, m.renderAttachments
 			}
 		case "r":
 			m.loading = true
 			m.statusMsg = ""
-			m.imageFails = make(map[int]int)
-			m.rendered = make(map[int]bool)
 			return m, m.loadPosts
 		}
 	case postsLoadedMsg:
 		m.posts = []bsk.FeedItem(msg)
 		m.loading = false
 		m.cursor = 0
-		m.imageFails = make(map[int]int)
-		m.rendered = make(map[int]bool)
 		if len(msg) == 0 {
 			m.statusMsg = "No posts found."
-		} else {
-			return m, m.renderCursorImages
 		}
-	case imageRenderedMsg:
-		m.imageFails[msg.index] = msg.fails
-		m.rendered[msg.index] = true
-		return m, nil
 	case loadErrorMsg:
 		m.loading = false
 		m.statusMsg = string(msg)
@@ -126,19 +108,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) renderCursorImages() tea.Msg {
-	idx := m.cursor
-	if idx >= len(m.posts) || len(m.posts[idx].Embeds) == 0 || m.rendered[idx] {
-		return nil
-	}
-	post := m.posts[idx]
-	go func() {
-		errs := bsk.RenderImages(post)
-		if Program != nil {
-			Program.Send(imageRenderedMsg{idx, len(errs)})
+func (m Model) renderAttachments() tea.Msg {
+	post := m.posts[m.cursor]
+	failed := 0
+	for _, embed := range post.Embeds {
+		if err := bsk.RenderImage(embed); err != nil {
+			failed++
 		}
-	}()
-	return nil
+	}
+	if failed > 0 {
+		return loadErrorMsg(fmt.Sprintf("%d/%d images failed to render", failed, len(post.Embeds)))
+	}
+	return loadErrorMsg("Images rendered")
 }
 
 func (m Model) View() tea.View {
@@ -162,16 +143,12 @@ func (m Model) View() tea.View {
 		}
 		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
 		b.WriteString(bsk.FormatPost(m.posts[idx]))
-		if n, ok := m.imageFails[idx]; ok && n > 0 {
-			b.WriteString(fmt.Sprintf("  ⚠ %d attachment(s) could not be displayed\n", n))
-		}
-		b.WriteString("\n")
 	}
 
 	if m.statusMsg != "" {
 		b.WriteString(fmt.Sprintf("%s\n", m.statusMsg))
 	}
 
-	b.WriteString("\n[r] refresh  [esc] back  [q] quit\n")
+	b.WriteString("\n[a] attachments  [r] refresh  [esc] back  [q] quit\n")
 	return tea.NewView(b.String())
 }
