@@ -21,15 +21,21 @@ type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
 
+type imageRenderedMsg struct {
+	imageRows int
+	status    string
+}
+
 type Model struct {
-	cfg        *config.Config
-	client     *xrpc.Client
-	posts      []bsk.FeedItem
-	cursor     int
-	imgCursor  int
-	loading    bool
-	statusMsg  string
+	cfg         *config.Config
+	client      *xrpc.Client
+	posts       []bsk.FeedItem
+	cursor      int
+	imgCursor   int
+	loading     bool
+	statusMsg   string
 	hasRendered bool
+	imageRows   int
 }
 
 func NewModel() (Model, error) {
@@ -80,6 +86,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "esc":
 			m.hasRendered = false
+			m.imageRows = 0
 			bsk.ClearImages()
 			return m, func() tea.Msg { return BackMsg{} }
 		case "up", "k":
@@ -87,6 +94,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 				m.imgCursor = 0
 				m.hasRendered = false
+				m.imageRows = 0
 				m.statusMsg = ""
 				bsk.ClearImages()
 			}
@@ -95,6 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 				m.imgCursor = 0
 				m.hasRendered = false
+				m.imageRows = 0
 				m.statusMsg = ""
 				bsk.ClearImages()
 			}
@@ -126,6 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			m.statusMsg = ""
 			m.hasRendered = false
+			m.imageRows = 0
 			bsk.ClearImages()
 			return m, m.loadPosts
 		}
@@ -135,12 +145,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.imgCursor = 0
 		m.hasRendered = false
+		m.imageRows = 0
 		if len(msg) == 0 {
 			m.statusMsg = "No posts found."
 		}
 	case loadErrorMsg:
 		m.loading = false
 		m.statusMsg = string(msg)
+	case imageRenderedMsg:
+		m.imageRows = msg.imageRows
+		m.statusMsg = msg.status
 	}
 
 	return m, nil
@@ -154,13 +168,17 @@ func (m Model) renderAttachment() tea.Msg {
 
 	postText := bsk.FormatPost(post)
 	postLines := strings.Count(postText, "\n")
-	yOffset := 9 + postLines
+	yOffset := 5 + postLines
 
 	bsk.ClearImages()
-	if err := bsk.RenderImage(post.Embeds[m.imgCursor], yOffset); err != nil {
+	rows, err := bsk.RenderImage(post.Embeds[m.imgCursor], yOffset)
+	if err != nil {
 		return loadErrorMsg(fmt.Sprintf("Render failed: %v", err))
 	}
-	return loadErrorMsg(fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)))
+	return imageRenderedMsg{
+		imageRows: rows,
+		status:    fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
+	}
 }
 
 func (m Model) openAttachment() tea.Msg {
@@ -207,6 +225,10 @@ func (m Model) View() tea.View {
 		}
 		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
 		b.WriteString(bsk.FormatPost(m.posts[idx]))
+	}
+
+	if m.hasRendered && m.imageRows > 0 {
+		b.WriteString(strings.Repeat("\n", m.imageRows))
 	}
 
 	if m.statusMsg != "" {
