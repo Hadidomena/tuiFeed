@@ -110,20 +110,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "h":
 			if m.hasRendered && m.imgCursor > 0 {
 				m.imgCursor--
-				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
 				return m, m.renderAttachment
 			}
 		case "right", "l":
 			if m.hasRendered && m.imgCursor < len(m.posts[m.cursor].Embeds)-1 {
 				m.imgCursor++
-				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
 				return m, m.renderAttachment
 			}
 		case "a":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
 				m.imgCursor = 0
 				m.hasRendered = true
-				m.statusMsg = fmt.Sprintf("Rendering image 1/%d...", len(m.posts[m.cursor].Embeds))
 				return m, m.renderAttachment
 			}
 		case "o":
@@ -154,7 +151,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = string(msg)
 	case imageRenderedMsg:
 		m.imageRows = msg.imageRows
-		m.statusMsg = msg.status
 	}
 
 	return m, nil
