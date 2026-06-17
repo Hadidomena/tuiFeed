@@ -157,21 +157,21 @@ func FormatPost(item FeedItem) string {
 	return b.String()
 }
 
-func RenderImage(url string, yOffset int) error {
+func RenderImage(url string, yOffset int) (int, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return 0, fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read failed: %w", err)
+		return 0, fmt.Errorf("read failed: %w", err)
 	}
 
 	ct := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(ct, "image/") {
-		return fmt.Errorf("not an image: %s", ct)
+		return 0, fmt.Errorf("not an image: %s", ct)
 	}
 
 	return RenderTerminalImage(data, yOffset)

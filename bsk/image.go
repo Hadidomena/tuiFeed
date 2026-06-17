@@ -56,10 +56,10 @@ func DetectImageProtocol() ImageProto {
 	return detectedProto
 }
 
-func RenderTerminalImage(data []byte, yOffset int) error {
+func RenderTerminalImage(data []byte, yOffset int) (int, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("decode failed: %w", err)
+		return 0, fmt.Errorf("decode failed: %w", err)
 	}
 
 	img = resizeToFit(img, 40, 18)
@@ -70,9 +70,13 @@ func RenderTerminalImage(data []byte, yOffset int) error {
 	case ProtoKitty:
 		return renderKitty(img, yOffset)
 	case ProtoSixel:
-		return renderSixel(img, yOffset)
+		rows := img.Bounds().Dy() / 20
+		if rows < 1 {
+			rows = 1
+		}
+		return rows, renderSixel(img, yOffset)
 	default:
-		return RenderImageExternal(data)
+		return 0, RenderImageExternal(data)
 	}
 }
 
@@ -135,10 +139,10 @@ func ClearImages() {
 	os.Stdout.Write([]byte("\033_Ga=d,d=A\033\\"))
 }
 
-func renderKitty(img image.Image, yOffset int) error {
+func renderKitty(img image.Image, yOffset int) (int, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		return fmt.Errorf("png encode failed: %w", err)
+		return 0, fmt.Errorf("png encode failed: %w", err)
 	}
 	imgBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 
@@ -177,7 +181,7 @@ func renderKitty(img image.Image, yOffset int) error {
 	}
 
 	_, err := os.Stdout.Write(out.Bytes())
-	return err
+	return rows, err
 }
 
 func renderSixel(img image.Image, yOffset int) error {
