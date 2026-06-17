@@ -3,6 +3,8 @@ package feed
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -20,12 +22,14 @@ type postsLoadedMsg []bsk.FeedItem
 type loadErrorMsg string
 
 type Model struct {
-	cfg       *config.Config
-	client    *xrpc.Client
-	posts     []bsk.FeedItem
-	cursor    int
-	loading   bool
-	statusMsg string
+	cfg        *config.Config
+	client     *xrpc.Client
+	posts      []bsk.FeedItem
+	cursor     int
+	imgCursor  int
+	loading    bool
+	statusMsg  string
+	hasRendered bool
 }
 
 func NewModel() (Model, error) {
@@ -72,31 +76,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
+			bsk.ClearImages()
 			return m, tea.Quit
 		case "esc":
+			m.hasRendered = false
+			bsk.ClearImages()
 			return m, func() tea.Msg { return BackMsg{} }
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "down", "j":
 			if m.cursor < len(m.posts)-1 {
 				m.cursor++
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.statusMsg = ""
+				bsk.ClearImages()
+			}
+		case "left", "h":
+			if m.hasRendered && m.imgCursor > 0 {
+				m.imgCursor--
+				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
+				return m, tea.Sequence(
+					func() tea.Msg { bsk.ClearImages(); return nil },
+					m.renderAttachment,
+				)
+			}
+		case "right", "l":
+			if m.hasRendered && m.imgCursor < len(m.posts[m.cursor].Embeds)-1 {
+				m.imgCursor++
+				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
+				return m, tea.Sequence(
+					func() tea.Msg { bsk.ClearImages(); return nil },
+					m.renderAttachment,
+				)
 			}
 		case "a":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
-				m.statusMsg = "Rendering images..."
-				return m, m.renderAttachments
+				m.imgCursor = 0
+				m.hasRendered = true
+				m.statusMsg = fmt.Sprintf("Rendering image 1/%d...", len(m.posts[m.cursor].Embeds))
+				return m, m.renderAttachment
+			}
+		case "o":
+			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
+				m.statusMsg = "Opening image externally..."
+				return m, m.openAttachment
 			}
 		case "r":
 			m.loading = true
 			m.statusMsg = ""
+			m.hasRendered = false
+			bsk.ClearImages()
 			return m, m.loadPosts
 		}
 	case postsLoadedMsg:
 		m.posts = []bsk.FeedItem(msg)
 		m.loading = false
 		m.cursor = 0
+		m.imgCursor = 0
+		m.hasRendered = false
 		if len(msg) == 0 {
 			m.statusMsg = "No posts found."
 		}
@@ -108,18 +152,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) renderAttachments() tea.Msg {
+func (m Model) renderAttachment() tea.Msg {
 	post := m.posts[m.cursor]
-	failed := 0
-	for _, embed := range post.Embeds {
-		if err := bsk.RenderImage(embed); err != nil {
-			failed++
-		}
+	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
+		return loadErrorMsg("No image to render")
 	}
-	if failed > 0 {
-		return loadErrorMsg(fmt.Sprintf("%d/%d images failed to render", failed, len(post.Embeds)))
+
+	if err := bsk.RenderImage(post.Embeds[m.imgCursor], 0); err != nil {
+		return loadErrorMsg(fmt.Sprintf("Render failed: %v", err))
 	}
-	return loadErrorMsg("Images rendered")
+	return loadErrorMsg(fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)))
+}
+
+func (m Model) openAttachment() tea.Msg {
+	post := m.posts[m.cursor]
+	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
+		return loadErrorMsg("No image to open")
+	}
+
+	resp, err := http.Get(post.Embeds[m.imgCursor])
+	if err != nil {
+		return loadErrorMsg(fmt.Sprintf("Download failed: %v", err))
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return loadErrorMsg(fmt.Sprintf("Read failed: %v", err))
+	}
+
+	if err := bsk.RenderImageExternal(data); err != nil {
+		return loadErrorMsg(fmt.Sprintf("Open failed: %v", err))
+	}
+	return loadErrorMsg("Opened externally")
 }
 
 func (m Model) View() tea.View {
@@ -149,6 +214,10 @@ func (m Model) View() tea.View {
 		b.WriteString(fmt.Sprintf("%s\n", m.statusMsg))
 	}
 
-	b.WriteString("\n[a] attachments  [r] refresh  [esc] back  [q] quit\n")
+	if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
+		b.WriteString("\n[←/→] prev/next image  [o] open externally  [esc] back  [q] quit\n")
+	} else {
+		b.WriteString("\n[a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
+	}
 	return tea.NewView(b.String())
 }
