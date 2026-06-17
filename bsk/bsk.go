@@ -146,24 +146,27 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func PrintPost(post PostInfo) error {
-	fmt.Printf("─── %s (@%s) ───\n", post.AuthorDisplayName, post.AuthorHandle)
-	fmt.Printf("❤️ %d  💬 %d  📅 %s\n", post.LikeCount, post.ReplyCount, post.CreatedAt)
-	fmt.Println()
-	fmt.Println(post.Text)
-	fmt.Println()
+func FormatPost(item FeedItem) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
+	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
+	b.WriteString("\n")
+	b.WriteString(item.Text)
+	b.WriteString("\n\n")
 
-	if len(post.Embeds) > 0 {
-		fmt.Println("── Attachments ──")
-		for i, embed := range post.Embeds {
-			fmt.Printf("[%d/%d]\n", i+1, len(post.Embeds))
-			if err := renderImage(embed); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			}
-		}
+	if len(item.Embeds) > 0 {
+		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
 	}
 
-	return nil
+	return b.String()
+}
+
+func RenderImages(item FeedItem) {
+	for _, embed := range item.Embeds {
+		if err := renderImage(embed); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
+	}
 }
 
 func renderImage(url string) error {
