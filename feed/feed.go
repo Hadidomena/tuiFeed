@@ -102,19 +102,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.hasRendered && m.imgCursor > 0 {
 				m.imgCursor--
 				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
-				return m, tea.Sequence(
-					func() tea.Msg { bsk.ClearImages(); return nil },
-					m.renderAttachment,
-				)
+				return m, m.renderAttachment
 			}
 		case "right", "l":
 			if m.hasRendered && m.imgCursor < len(m.posts[m.cursor].Embeds)-1 {
 				m.imgCursor++
 				m.statusMsg = fmt.Sprintf("Rendering image %d/%d...", m.imgCursor+1, len(m.posts[m.cursor].Embeds))
-				return m, tea.Sequence(
-					func() tea.Msg { bsk.ClearImages(); return nil },
-					m.renderAttachment,
-				)
+				return m, m.renderAttachment
 			}
 		case "a":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
@@ -158,7 +152,12 @@ func (m Model) renderAttachment() tea.Msg {
 		return loadErrorMsg("No image to render")
 	}
 
-	if err := bsk.RenderImage(post.Embeds[m.imgCursor], 0); err != nil {
+	postText := bsk.FormatPost(post)
+	postLines := strings.Count(postText, "\n")
+	yOffset := 9 + postLines
+
+	bsk.ClearImages()
+	if err := bsk.RenderImage(post.Embeds[m.imgCursor], yOffset); err != nil {
 		return loadErrorMsg(fmt.Sprintf("Render failed: %v", err))
 	}
 	return loadErrorMsg(fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)))
