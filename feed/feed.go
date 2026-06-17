@@ -13,19 +13,28 @@ import (
 	"github.com/Hadidomena/tuiFeed/config"
 )
 
+var Program *tea.Program
+
 type BackMsg struct{}
 
 type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
 
+type imageRenderedMsg struct {
+	index int
+	fails int
+}
+
 type Model struct {
-	cfg       *config.Config
-	client    *xrpc.Client
-	posts     []bsk.FeedItem
-	cursor    int
-	loading   bool
-	statusMsg string
+	cfg        *config.Config
+	client     *xrpc.Client
+	posts      []bsk.FeedItem
+	cursor     int
+	loading    bool
+	statusMsg  string
+	imageFails map[int]int
+	rendered   map[int]bool
 }
 
 func NewModel() (Model, error) {
@@ -34,9 +43,11 @@ func NewModel() (Model, error) {
 		return Model{}, err
 	}
 	return Model{
-		cfg:     cfg,
-		client:  bsk.NewClient(),
-		loading: true,
+		cfg:        cfg,
+		client:     bsk.NewClient(),
+		loading:    true,
+		imageFails: make(map[int]int),
+		rendered:   make(map[int]bool),
 	}, nil
 }
 
@@ -61,7 +72,7 @@ func (m Model) loadPosts() tea.Msg {
 	}
 
 	sort.Slice(allPosts, func(i, j int) bool {
-		return allPosts[i].IndexedAt > allPosts[j].IndexedAt
+		return allPosts[i].CreatedAt > allPosts[j].CreatedAt
 	})
 
 	return postsLoadedMsg(allPosts)
@@ -78,29 +89,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
+				return m, m.renderCursorImages
 			}
 		case "down", "j":
 			if m.cursor < len(m.posts)-1 {
 				m.cursor++
+				return m, m.renderCursorImages
 			}
 		case "r":
 			m.loading = true
 			m.statusMsg = ""
+			m.imageFails = make(map[int]int)
+			m.rendered = make(map[int]bool)
 			return m, m.loadPosts
 		}
 	case postsLoadedMsg:
 		m.posts = []bsk.FeedItem(msg)
 		m.loading = false
 		m.cursor = 0
+		m.imageFails = make(map[int]int)
+		m.rendered = make(map[int]bool)
 		if len(msg) == 0 {
 			m.statusMsg = "No posts found."
+		} else {
+			return m, m.renderCursorImages
 		}
+	case imageRenderedMsg:
+		m.imageFails[msg.index] = msg.fails
+		m.rendered[msg.index] = true
+		return m, nil
 	case loadErrorMsg:
 		m.loading = false
 		m.statusMsg = string(msg)
 	}
 
 	return m, nil
+}
+
+func (m Model) renderCursorImages() tea.Msg {
+	idx := m.cursor
+	if idx >= len(m.posts) || len(m.posts[idx].Embeds) == 0 || m.rendered[idx] {
+		return nil
+	}
+	post := m.posts[idx]
+	go func() {
+		errs := bsk.RenderImages(post)
+		if Program != nil {
+			Program.Send(imageRenderedMsg{idx, len(errs)})
+		}
+	}()
+	return nil
 }
 
 func (m Model) View() tea.View {
@@ -118,10 +156,16 @@ func (m Model) View() tea.View {
 	if len(m.posts) == 0 {
 		b.WriteString("No posts to display.\n")
 	} else {
-		for _, post := range m.posts {
-			b.WriteString(bsk.FormatPost(post))
-			bsk.RenderImages(post)
+		idx := m.cursor
+		if idx >= len(m.posts) {
+			idx = 0
 		}
+		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
+		b.WriteString(bsk.FormatPost(m.posts[idx]))
+		if n, ok := m.imageFails[idx]; ok && n > 0 {
+			b.WriteString(fmt.Sprintf("  ⚠ %d attachment(s) could not be displayed\n", n))
+		}
+		b.WriteString("\n")
 	}
 
 	if m.statusMsg != "" {
