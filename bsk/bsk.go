@@ -16,6 +16,7 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/srlehn/termimg"
 	_ "github.com/srlehn/termimg/drawers/all"
+	_ "golang.org/x/image/webp"
 )
 
 type PostInfo struct {
