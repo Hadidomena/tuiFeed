@@ -3,10 +3,6 @@ package bsk
 import (
 	"context"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -14,9 +10,6 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/srlehn/termimg"
-	_ "github.com/srlehn/termimg/drawers/all"
-	_ "golang.org/x/image/webp"
 )
 
 type PostInfo struct {
@@ -164,7 +157,7 @@ func FormatPost(item FeedItem) string {
 	return b.String()
 }
 
-func RenderImage(url string) error {
+func RenderImage(url string, yOffset int) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
@@ -181,12 +174,7 @@ func RenderImage(url string) error {
 		return fmt.Errorf("not an image: %s", ct)
 	}
 
-	bounds := image.Rect(0, 0, 40, 20)
-	if err := termimg.DrawBytes(data, bounds); err != nil {
-		return fmt.Errorf("display failed: %w", err)
-	}
-
-	return nil
+	return RenderTerminalImage(data, yOffset)
 }
 
 func int64Val(p *int64) int64 {
