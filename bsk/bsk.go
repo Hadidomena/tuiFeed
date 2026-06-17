@@ -119,6 +119,33 @@ func GetExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
 	return result
 }
 
+type FeedItem struct {
+	PostInfo
+	URI       string
+	IndexedAt string
+}
+
+func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit int64) ([]FeedItem, error) {
+	output, err := bsky.FeedGetAuthorFeed(ctx, client, actor, "", "posts_no_replies", false, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching feed: %w", err)
+	}
+
+	var items []FeedItem
+	for _, fvp := range output.Feed {
+		if fvp.Post == nil {
+			continue
+		}
+		info := ExtractPostInfo(fvp.Post)
+		items = append(items, FeedItem{
+			PostInfo:  info,
+			URI:       fvp.Post.Uri,
+			IndexedAt: fvp.Post.IndexedAt,
+		})
+	}
+	return items, nil
+}
+
 func PrintPost(post PostInfo) error {
 	fmt.Printf("─── %s (@%s) ───\n", post.AuthorDisplayName, post.AuthorHandle)
 	fmt.Printf("❤️ %d  💬 %d  📅 %s\n", post.LikeCount, post.ReplyCount, post.CreatedAt)
