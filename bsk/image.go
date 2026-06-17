@@ -151,21 +151,30 @@ func renderKitty(img image.Image, yOffset int) error {
 		rows = 1
 	}
 
-	y := yOffset + 1
-	x := 1
+	row := yOffset + 1
+	if row < 1 {
+		row = 1
+	}
 
-	settings := fmt.Sprintf("a=T,t=d,f=100,X=%d,Y=%d,c=%d,r=%d,z=2,C=1,", x, y, cols, rows)
+	settings := fmt.Sprintf("a=T,t=d,f=100,c=%d,r=%d,z=2,C=1", cols, rows)
 
 	var out bytes.Buffer
+	out.WriteString(fmt.Sprintf("\033[%d;1H", row))
+
 	kittyLimit := 4096
 	lenB64 := len(imgBase64)
 
-	for i := 0; i < (lenB64-1)/kittyLimit; i++ {
-		chunk := imgBase64[i*kittyLimit : (i+1)*kittyLimit]
-		out.WriteString(fmt.Sprintf("\033_G%sC=1,m=1;%s\033\\", settings, chunk))
-		settings = ""
+	if lenB64 <= kittyLimit {
+		out.WriteString(fmt.Sprintf("\033_G%s,m=0;%s\033\\", settings, imgBase64))
+	} else {
+		out.WriteString(fmt.Sprintf("\033_G%s,m=1;%s\033\\", settings, imgBase64[:kittyLimit]))
+		pos := kittyLimit
+		for pos+kittyLimit < lenB64 {
+			out.WriteString(fmt.Sprintf("\033_Gm=1;%s\033\\", imgBase64[pos:pos+kittyLimit]))
+			pos += kittyLimit
+		}
+		out.WriteString(fmt.Sprintf("\033_Gm=0;%s\033\\", imgBase64[pos:]))
 	}
-	out.WriteString(fmt.Sprintf("\033_G%sC=1,m=0;%s\033\\", settings, imgBase64[((lenB64-1)/kittyLimit)*kittyLimit:]))
 
 	_, err := os.Stdout.Write(out.Bytes())
 	return err
