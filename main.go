@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Hadidomena/tuiFeed/feed"
 	"github.com/Hadidomena/tuiFeed/follows"
 )
 
@@ -14,21 +15,20 @@ type sessionState int
 const (
 	showDashboardView sessionState = iota
 	showFollowsView
-	// showFormView
+	showFeedView
 )
 
 type OpenFollowsMsg struct{}
+type OpenFeedMsg struct{}
 
 type DashboardModel struct {
-	choices  []string
-	cursor   int
-	selected map[int]struct{}
+	cursor  int
+	choices []string
 }
 
 func NewDashboardModel() DashboardModel {
 	return DashboardModel{
-		choices:  []string{"Manage follows", "Buy celery", "Buy kohlrabi"},
-		selected: make(map[int]struct{}),
+		choices: []string{"View Feed", "Manage follows"},
 	}
 }
 
@@ -51,13 +51,11 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter", "space":
-			if m.cursor == 0 {
+			switch m.cursor {
+			case 0:
+				return m, func() tea.Msg { return OpenFeedMsg{} }
+			case 1:
 				return m, func() tea.Msg { return OpenFollowsMsg{} }
-			}
-			if _, ok := m.selected[m.cursor]; ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
 			}
 		}
 	}
@@ -65,17 +63,13 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m DashboardModel) View() tea.View {
-	s := "What should we buy at the market?\n\n"
+	s := "tuiFeed\n\n"
 	for i, choice := range m.choices {
 		cursor := " "
 		if m.cursor == i {
 			cursor = ">"
 		}
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+		s += fmt.Sprintf("%s  %s\n", cursor, choice)
 	}
 	s += "\nPress q to quit.\n"
 	return tea.NewView(s)
@@ -86,6 +80,7 @@ type MainModel struct {
 	state     sessionState
 	dashboard DashboardModel
 	follows   follows.Model
+	feed      feed.Model
 }
 
 func NewMainModel() MainModel {
@@ -93,10 +88,15 @@ func NewMainModel() MainModel {
 	if err != nil {
 		fm, _ = follows.NewModel()
 	}
+	fd, err := feed.NewModel()
+	if err != nil {
+		fd, _ = feed.NewModel()
+	}
 	return MainModel{
 		state:     showDashboardView,
 		dashboard: NewDashboardModel(),
 		follows:   fm,
+		feed:      fd,
 	}
 }
 
@@ -118,6 +118,16 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case follows.BackMsg:
 		m.state = showDashboardView
 		return m, nil
+	case OpenFeedMsg:
+		m.state = showFeedView
+		fd, err := feed.NewModel()
+		if err == nil {
+			m.feed = fd
+		}
+		return m, m.feed.Init()
+	case feed.BackMsg:
+		m.state = showDashboardView
+		return m, nil
 	}
 
 	switch m.state {
@@ -129,6 +139,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updatedModel, followsCmd := m.follows.Update(msg)
 		m.follows = updatedModel.(follows.Model)
 		cmd = followsCmd
+	case showFeedView:
+		updatedModel, feedCmd := m.feed.Update(msg)
+		m.feed = updatedModel.(feed.Model)
+		cmd = feedCmd
 	}
 
 	return m, cmd
@@ -140,6 +154,8 @@ func (m MainModel) View() tea.View {
 		return m.dashboard.View()
 	case showFollowsView:
 		return m.follows.View()
+	case showFeedView:
+		return m.feed.View()
 	default:
 		return tea.NewView("Unknown state")
 	}
