@@ -9,7 +9,6 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/bluesky-social/indigo/api/atproto"
@@ -163,9 +162,7 @@ func FormatPost(item FeedItem) string {
 
 func RenderImages(item FeedItem) {
 	for _, embed := range item.Embeds {
-		if err := renderImage(embed); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		}
+		_ = renderImage(embed)
 	}
 }
 
