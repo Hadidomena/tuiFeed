@@ -118,31 +118,9 @@ func (m Model) View() tea.View {
 	if len(m.posts) == 0 {
 		b.WriteString("No posts to display.\n")
 	} else {
-		for i, post := range m.posts {
-			cursor := " "
-			if m.cursor == i {
-				cursor = ">"
-			}
-
-			displayName := post.AuthorDisplayName
-			if displayName == "" {
-				displayName = post.AuthorHandle
-			}
-
-			text := strings.ReplaceAll(post.Text, "\n", " ")
-			if len([]rune(text)) > 80 {
-				text = string([]rune(text)[:80]) + "..."
-			}
-
-			date := post.CreatedAt
-			if len(date) > 10 {
-				date = date[:10]
-			}
-
-			b.WriteString(fmt.Sprintf("%s %s (@%s)\n", cursor, displayName, post.AuthorHandle))
-			b.WriteString(fmt.Sprintf("  %s\n", text))
-			b.WriteString(fmt.Sprintf("  ❤️ %d  💬 %d  %s\n", post.LikeCount, post.ReplyCount, date))
-			b.WriteString("\n")
+		for _, post := range m.posts {
+			b.WriteString(bsk.FormatPost(post))
+			bsk.RenderImages(post)
 		}
 	}
 
