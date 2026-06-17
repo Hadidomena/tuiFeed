@@ -41,10 +41,10 @@ func NewClient() *xrpc.Client {
 	}
 }
 
-func GetPostThread(ctx context.Context, client *xrpc.Client, postUrl string) (*Thread, error) {
-	parts := strings.Split(postUrl, "/")
+func GetPostThread(ctx context.Context, client *xrpc.Client, postURL string) (*Thread, error) {
+	parts := strings.Split(postURL, "/")
 	if len(parts) < 7 {
-		return nil, fmt.Errorf("invalid post URL format: %s", postUrl)
+		return nil, fmt.Errorf("invalid post URL format: %s", postURL)
 	}
 	handle := parts[4]
 	rkey := parts[6]
@@ -156,22 +156,15 @@ func FormatPost(item FeedItem) string {
 
 	if len(item.Embeds) > 0 {
 		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
+		for _, embed := range item.Embeds {
+			b.WriteString(fmt.Sprintf("  %s\n", embed))
+		}
 	}
 
 	return b.String()
 }
 
-func RenderImages(item FeedItem) []error {
-	var errs []error
-	for _, embed := range item.Embeds {
-		if err := renderImage(embed); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errs
-}
-
-func renderImage(url string) error {
+func RenderImage(url string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
