@@ -160,10 +160,14 @@ func FormatPost(item FeedItem) string {
 	return b.String()
 }
 
-func RenderImages(item FeedItem) {
+func RenderImages(item FeedItem) []error {
+	var errs []error
 	for _, embed := range item.Embeds {
-		_ = renderImage(embed)
+		if err := renderImage(embed); err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return errs
 }
 
 func renderImage(url string) error {
