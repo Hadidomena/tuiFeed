@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 )
 
 type Config struct {
-	Follows []string `json:"follows"`
+	Follows    []string          `json:"follows"`
+	LastChecks map[string]string `json:"last_checks,omitempty"`
 }
 
 func configPath() (string, error) {
@@ -64,5 +66,31 @@ func (c *Config) RemoveFollow(index int) {
 	if index < 0 || index >= len(c.Follows) {
 		return
 	}
+	handle := c.Follows[index]
 	c.Follows = append(c.Follows[:index], c.Follows[index+1:]...)
+	if c.LastChecks != nil {
+		delete(c.LastChecks, handle)
+	}
+}
+
+func (c *Config) SetLastCheck(handle string) {
+	if c.LastChecks == nil {
+		c.LastChecks = make(map[string]string)
+	}
+	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339)
+}
+
+func (c *Config) GetLastCheck(handle string) time.Time {
+	if c.LastChecks == nil {
+		return time.Time{}
+	}
+	s, ok := c.LastChecks[handle]
+	if !ok {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
