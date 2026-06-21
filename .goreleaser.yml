@@ -18,7 +18,7 @@ builds:
     binary: tuiFeed
 
 archives:
-  - formats: ['tar.gz']
+  - format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
