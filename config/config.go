@@ -10,7 +10,14 @@ import (
 
 type Config struct {
 	Follows    []string          `json:"follows"`
-	LastChecks map[string]string `json:"last_checks,omitempty"`
+	LastChecks map[string]string `json:"last_checks"`
+}
+
+func (c *Config) SetLastCheck(handle string) {
+	if c.LastChecks == nil {
+		c.LastChecks = make(map[string]string)
+	}
+	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339)
 }
 
 func configPath() (string, error) {
@@ -71,13 +78,6 @@ func (c *Config) RemoveFollow(index int) {
 	if c.LastChecks != nil {
 		delete(c.LastChecks, handle)
 	}
-}
-
-func (c *Config) SetLastCheck(handle string) {
-	if c.LastChecks == nil {
-		c.LastChecks = make(map[string]string)
-	}
-	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339)
 }
 
 func (c *Config) GetLastCheck(handle string) time.Time {
