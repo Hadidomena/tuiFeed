@@ -71,6 +71,9 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) loadPosts() tea.Msg {
+	if m.cfg == nil || m.client == nil {
+		return loadErrorMsg("Not available in this view.")
+	}
 	ctx := context.Background()
 
 	if len(m.cfg.Follows) == 0 {
