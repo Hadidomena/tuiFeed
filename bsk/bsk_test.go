@@ -1,6 +1,7 @@
 package bsk
 
 import (
+	"context"
 	"testing"
 
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -173,7 +174,7 @@ func TestGetExtantEmbeds_nilPost(t *testing.T) {
 }
 
 func TestGetPostThread_invalidURL(t *testing.T) {
-	_, err := GetPostThread(nil, nil, "invalid-url")
+	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
 	if err == nil {
 		t.Fatal("expected error for invalid URL")
 	}
