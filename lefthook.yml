@@ -6,4 +6,4 @@ pre-commit:
       run: gofmt -w {staged_files} && git add {staged_files}
     lint:
       glob: "*.go"
-      run: sh -c 'echo {staged_files} | xargs -n1 dirname | sort -u | xargs -I{} golangci-lint run {}'
+      run: golangci-lint run --new-from-rev=HEAD --new
