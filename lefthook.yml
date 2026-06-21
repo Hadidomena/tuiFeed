@@ -6,4 +6,4 @@ pre-commit:
       run: gofmt -w {staged_files} && git add {staged_files}
     lint:
       glob: "*.go"
-      run: golangci-lint run
+      run: golangci-lint run {staged_files}
