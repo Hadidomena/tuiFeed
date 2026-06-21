@@ -3,20 +3,13 @@ package bsk
 import (
 	"context"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/srlehn/termimg"
-	_ "github.com/srlehn/termimg/drawers/all"
 )
 
 type PostInfo struct {
@@ -41,10 +34,10 @@ func NewClient() *xrpc.Client {
 	}
 }
 
-func GetPostThread(ctx context.Context, client *xrpc.Client, postUrl string) (*Thread, error) {
-	parts := strings.Split(postUrl, "/")
+func GetPostThread(ctx context.Context, client *xrpc.Client, postURL string) (*Thread, error) {
+	parts := strings.Split(postURL, "/")
 	if len(parts) < 7 {
-		return nil, fmt.Errorf("invalid post URL format: %s", postUrl)
+		return nil, fmt.Errorf("invalid post URL format: %s", postURL)
 	}
 	handle := parts[4]
 	rkey := parts[6]
@@ -119,49 +112,69 @@ func GetExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
 	return result
 }
 
-func PrintPost(post PostInfo) error {
-	fmt.Printf("─── %s (@%s) ───\n", post.AuthorDisplayName, post.AuthorHandle)
-	fmt.Printf("❤️ %d  💬 %d  📅 %s\n", post.LikeCount, post.ReplyCount, post.CreatedAt)
-	fmt.Println()
-	fmt.Println(post.Text)
-	fmt.Println()
+type FeedItem struct {
+	PostInfo
+	URI       string
+	IndexedAt string
+}
 
-	if len(post.Embeds) > 0 {
-		fmt.Println("── Attachments ──")
-		for i, embed := range post.Embeds {
-			fmt.Printf("[%d/%d]\n", i+1, len(post.Embeds))
-			if err := renderImage(embed); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			}
+func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit int64) ([]FeedItem, error) {
+	output, err := bsky.FeedGetAuthorFeed(ctx, client, actor, "", "posts_no_replies", false, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching feed: %w", err)
+	}
+
+	var items []FeedItem
+	for _, fvp := range output.Feed {
+		if fvp.Post == nil {
+			continue
+		}
+		info := ExtractPostInfo(fvp.Post)
+		items = append(items, FeedItem{
+			PostInfo:  info,
+			URI:       fvp.Post.Uri,
+			IndexedAt: fvp.Post.IndexedAt,
+		})
+	}
+	return items, nil
+}
+
+func FormatPost(item FeedItem) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
+	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
+	b.WriteString("\n")
+	b.WriteString(item.Text)
+	b.WriteString("\n\n")
+
+	if len(item.Embeds) > 0 {
+		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
+		for _, embed := range item.Embeds {
+			b.WriteString(fmt.Sprintf("  %s\n", embed))
 		}
 	}
 
-	return nil
+	return b.String()
 }
 
-func renderImage(url string) error {
+func RenderImage(url string, yOffset int) (int, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return 0, fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read failed: %w", err)
+		return 0, fmt.Errorf("read failed: %w", err)
 	}
 
 	ct := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(ct, "image/") {
-		return fmt.Errorf("not an image: %s", ct)
+		return 0, fmt.Errorf("not an image: %s", ct)
 	}
 
-	bounds := image.Rect(0, 0, 40, 20)
-	if err := termimg.DrawBytes(data, bounds); err != nil {
-		return fmt.Errorf("display failed: %w", err)
-	}
-
-	return nil
+	return RenderTerminalImage(data, yOffset)
 }
 
 func int64Val(p *int64) int64 {
