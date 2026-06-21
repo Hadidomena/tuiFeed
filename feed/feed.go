@@ -64,6 +64,9 @@ func NewStaticModel(posts []bsk.FeedItem, title string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
 	return m.loadPosts
 }
 
