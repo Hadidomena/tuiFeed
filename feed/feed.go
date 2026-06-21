@@ -143,6 +143,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "Opening image externally..."
 				return m, m.openAttachment
 			}
+		case "s":
+			// TOFINISH config.savePost(handles)
 		case "r":
 			m.loading = true
 			m.statusMsg = ""
