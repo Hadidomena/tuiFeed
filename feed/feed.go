@@ -31,11 +31,14 @@ type Model struct {
 	client      *xrpc.Client
 	posts       []bsk.FeedItem
 	cursor      int
+	scrollPos   int
+	pageSize    int
 	imgCursor   int
 	loading     bool
 	statusMsg   string
 	hasRendered bool
 	imageRows   int
+	title       string
 }
 
 func NewModel() (Model, error) {
@@ -44,10 +47,20 @@ func NewModel() (Model, error) {
 		return Model{}, err
 	}
 	return Model{
-		cfg:     cfg,
-		client:  bsk.NewClient(),
-		loading: true,
+		cfg:      cfg,
+		client:   bsk.NewClient(),
+		loading:  true,
+		pageSize: 10,
+		title:    "Feed",
 	}, nil
+}
+
+func NewStaticModel(posts []bsk.FeedItem, title string) Model {
+	return Model{
+		posts:    posts,
+		pageSize: 10,
+		title:    title,
+	}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -89,23 +102,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.imageRows = 0
 			bsk.ClearImages()
 			return m, func() tea.Msg { return BackMsg{} }
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-				m.imgCursor = 0
-				m.hasRendered = false
-				m.imageRows = 0
-				m.statusMsg = ""
-				bsk.ClearImages()
-			}
 		case "down", "j":
 			if m.cursor < len(m.posts)-1 {
 				m.cursor++
-				m.imgCursor = 0
-				m.hasRendered = false
-				m.imageRows = 0
-				m.statusMsg = ""
-				bsk.ClearImages()
+				if m.cursor >= m.scrollPos+m.pageSize {
+					m.scrollPos++
+				}
+			}
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+				if m.cursor < m.scrollPos {
+					m.scrollPos--
+				}
 			}
 		case "left", "h":
 			if m.hasRendered && m.imgCursor > 0 {
@@ -133,6 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = ""
 			m.hasRendered = false
 			m.imageRows = 0
+			m.scrollPos = 0
 			bsk.ClearImages()
 			return m, m.loadPosts
 		}
@@ -141,6 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.cursor = 0
 		m.imgCursor = 0
+		m.scrollPos = 0
 		m.hasRendered = false
 		m.imageRows = 0
 		if len(msg) == 0 {
@@ -173,7 +184,7 @@ func (m Model) renderAttachment() tea.Msg {
 	}
 	return imageRenderedMsg{
 		imageRows: rows,
-		status:    fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
+		status:    fmt.Sprintf("Image %d/%d  [\u2190/\u2192] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
 	}
 }
 
@@ -203,8 +214,8 @@ func (m Model) openAttachment() tea.Msg {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("Feed\n")
-	b.WriteString(strings.Repeat("─", 30))
+	b.WriteString(m.title + "\n")
+	b.WriteString(strings.Repeat("\u2500", 30))
 	b.WriteString("\n\n")
 
 	if m.loading {
@@ -215,12 +226,55 @@ func (m Model) View() tea.View {
 	if len(m.posts) == 0 {
 		b.WriteString("No posts to display.\n")
 	} else {
-		idx := m.cursor
-		if idx >= len(m.posts) {
-			idx = 0
+		b.WriteString(fmt.Sprintf("%d posts\n\n", len(m.posts)))
+
+		end := m.scrollPos + m.pageSize
+		if end > len(m.posts) {
+			end = len(m.posts)
 		}
-		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
-		b.WriteString(bsk.FormatPost(m.posts[idx]))
+
+		for i := m.scrollPos; i < end; i++ {
+			post := m.posts[i]
+			cursor := "  "
+			if m.cursor == i {
+				cursor = "> "
+			}
+
+			createdAt := post.IndexedAt
+			if createdAt == "" {
+				createdAt = post.CreatedAt
+			}
+			if len(createdAt) > 10 {
+				createdAt = createdAt[:10]
+			}
+
+			author := post.AuthorDisplayName
+			if author == "" {
+				author = post.AuthorHandle
+			}
+
+			b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
+				cursor, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
+
+			text := strings.TrimSpace(post.Text)
+			if len(text) > 120 {
+				text = text[:120] + "..."
+			}
+			text = strings.ReplaceAll(text, "\n", " ")
+			b.WriteString(fmt.Sprintf("    %s\n", text))
+
+			if len(post.Embeds) > 0 {
+				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
+			}
+			b.WriteString("\n")
+		}
+
+		if m.scrollPos > 0 {
+			b.WriteString(fmt.Sprintf("  ... %d more above\n", m.scrollPos))
+		}
+		if end < len(m.posts) {
+			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.posts)-end))
+		}
 	}
 
 	if m.hasRendered && m.imageRows > 0 {
@@ -232,9 +286,10 @@ func (m Model) View() tea.View {
 	}
 
 	if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
-		b.WriteString("\n[←/→] prev/next image  [o] open externally  [esc] back  [q] quit\n")
+		b.WriteString("\n[\u2190/\u2192] prev/next image  [o] open externally  [esc] back  [q] quit\n")
 	} else {
 		b.WriteString("\n[a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
+
 	return tea.NewView(b.String())
 }

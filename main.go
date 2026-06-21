@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/config"
 	"github.com/Hadidomena/tuiFeed/feed"
 	"github.com/Hadidomena/tuiFeed/follows"
 )
@@ -16,10 +20,25 @@ const (
 	showDashboardView sessionState = iota
 	showFollowsView
 	showFeedView
+	showAccountSelectView
+	showSinceLastCheckView
+	showLoadingView
 )
 
 type OpenFollowsMsg struct{}
 type OpenFeedMsg struct{}
+type OpenAccountSelectMsg struct{}
+type BackToDashboardMsg struct{}
+
+type SelectAccountForSinceLastCheck struct {
+	handle string
+}
+
+type PostsFetchedMsg struct {
+	handle string
+	posts  []bsk.PostInfo
+	err    error
+}
 
 type DashboardModel struct {
 	cursor  int
@@ -28,7 +47,7 @@ type DashboardModel struct {
 
 func NewDashboardModel() DashboardModel {
 	return DashboardModel{
-		choices: []string{"View Feed", "Manage follows"},
+		choices: []string{"View Feed", "Posts since last check", "Manage follows"},
 	}
 }
 
@@ -50,11 +69,14 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			}
-		case "enter", "space":
-			switch m.cursor {
-			case 0:
+		case "enter", " ", "space":
+			if m.cursor == 0 {
 				return m, func() tea.Msg { return OpenFeedMsg{} }
-			case 1:
+			}
+			if m.cursor == 1 {
+				return m, func() tea.Msg { return OpenAccountSelectMsg{} }
+			}
+			if m.cursor == 2 {
 				return m, func() tea.Msg { return OpenFollowsMsg{} }
 			}
 		}
@@ -63,27 +85,124 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m DashboardModel) View() tea.View {
-	s := "tuiFeed\n\n"
+	s := "Bluesky TUI Feed\n\n"
 	for i, choice := range m.choices {
-		cursor := " "
+		cursor := "  "
 		if m.cursor == i {
-			cursor = ">"
+			cursor = "> "
 		}
-		s += fmt.Sprintf("%s  %s\n", cursor, choice)
+		s += fmt.Sprintf("%s%s\n", cursor, choice)
 	}
 	s += "\nPress q to quit.\n"
 	return tea.NewView(s)
 }
 
-// MainModel stores Types of sub-models
+type AccountSelectModel struct {
+	accounts   []string
+	lastChecks map[string]string
+	cursor     int
+}
+
+func NewAccountSelectModel(cfg *config.Config) AccountSelectModel {
+	return AccountSelectModel{
+		accounts:   cfg.Follows,
+		lastChecks: cfg.LastChecks,
+	}
+}
+
+func (m AccountSelectModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m AccountSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "esc":
+			return m, func() tea.Msg { return BackToDashboardMsg{} }
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.accounts)-1 {
+				m.cursor++
+			}
+		case "enter":
+			if len(m.accounts) > 0 {
+				return m, func() tea.Msg {
+					return SelectAccountForSinceLastCheck{handle: m.accounts[m.cursor]}
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m AccountSelectModel) View() tea.View {
+	var b strings.Builder
+
+	b.WriteString("Posts since last check\n")
+	b.WriteString(strings.Repeat("\u2500", 40) + "\n\n")
+
+	if len(m.accounts) == 0 {
+		b.WriteString("  No accounts followed.\n")
+		b.WriteString("  Add accounts in 'Manage follows' first.\n\n")
+	} else {
+		for i, handle := range m.accounts {
+			cursor := "  "
+			if m.cursor == i {
+				cursor = "> "
+			}
+			lastStr := "never"
+			if t, ok := m.lastChecks[handle]; ok && t != "" {
+				if len(t) >= 10 {
+					lastStr = t[:10]
+				}
+			}
+			b.WriteString(fmt.Sprintf("%s@%s  (last: %s)\n", cursor, handle, lastStr))
+		}
+	}
+
+	b.WriteString("\n[\u2191/\u2193] navigate  [enter] select  [esc] back\n")
+	return tea.NewView(b.String())
+}
+
+type LoadingModel struct {
+	message string
+}
+
+func (m LoadingModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyPressMsg:
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m LoadingModel) View() tea.View {
+	return tea.NewView(fmt.Sprintf("\n  %s\n\n", m.message))
+}
+
 type MainModel struct {
-	state     sessionState
-	dashboard DashboardModel
-	follows   follows.Model
-	feed      feed.Model
+	state         sessionState
+	cfg           *config.Config
+	dashboard     DashboardModel
+	follows       follows.Model
+	accountSelect AccountSelectModel
+	feed          feed.Model
+	loading       LoadingModel
 }
 
 func NewMainModel() MainModel {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = &config.Config{}
+	}
 	fm, err := follows.NewModel()
 	if err != nil {
 		fm, _ = follows.NewModel()
@@ -94,9 +213,11 @@ func NewMainModel() MainModel {
 	}
 	return MainModel{
 		state:     showDashboardView,
+		cfg:       cfg,
 		dashboard: NewDashboardModel(),
 		follows:   fm,
 		feed:      fd,
+		loading:   LoadingModel{message: "Fetching posts..."},
 	}
 }
 
@@ -107,7 +228,7 @@ func (m MainModel) Init() tea.Cmd {
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case OpenFollowsMsg:
 		m.state = showFollowsView
 		fm, err := follows.NewModel()
@@ -117,6 +238,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.follows.Init()
 	case follows.BackMsg:
 		m.state = showDashboardView
+		m.cfg, _ = config.Load()
 		return m, nil
 	case OpenFeedMsg:
 		m.state = showFeedView
@@ -128,24 +250,62 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case feed.BackMsg:
 		m.state = showDashboardView
 		return m, nil
+	case OpenAccountSelectMsg:
+		m.state = showAccountSelectView
+		m.cfg, _ = config.Load()
+		m.accountSelect = NewAccountSelectModel(m.cfg)
+		return m, m.accountSelect.Init()
+	case BackToDashboardMsg:
+		m.state = showDashboardView
+		return m, nil
+	case SelectAccountForSinceLastCheck:
+		m.state = showLoadingView
+		m.loading = LoadingModel{message: fmt.Sprintf("Fetching posts for @%s...", msg.handle)}
+		m.cfg, _ = config.Load()
+		lastCheck := ""
+		if m.cfg.LastChecks != nil {
+			lastCheck = m.cfg.LastChecks[msg.handle]
+		}
+		m.cfg.SetLastCheck(msg.handle)
+		err := m.cfg.Save()
+		if err != nil {
+			fmt.Printf("Error while saving the check for @%s", msg.handle)
+		}
+		return m, fetchSinceLastCheckCmd(msg.handle, lastCheck)
+	case PostsFetchedMsg:
+		m.state = showSinceLastCheckView
+		if msg.err != nil {
+			var feedItems []bsk.FeedItem
+			m.feed = feed.NewStaticModel(feedItems, fmt.Sprintf("Error: %v", msg.err))
+		} else {
+			feedItems := make([]bsk.FeedItem, 0, len(msg.posts))
+			for _, p := range msg.posts {
+				feedItems = append(feedItems, bsk.FeedItem{PostInfo: p})
+			}
+			m.feed = feed.NewStaticModel(feedItems, fmt.Sprintf("Posts since last check \u2014 @%s", msg.handle))
+		}
+		return m, m.feed.Init()
 	}
 
 	switch m.state {
 	case showDashboardView:
-		updatedModel, dashboardCmd := m.dashboard.Update(msg)
-		m.dashboard = updatedModel.(DashboardModel)
-		cmd = dashboardCmd
+		m.dashboard, cmd = updateSubModel(m.dashboard, msg)
 	case showFollowsView:
-		updatedModel, followsCmd := m.follows.Update(msg)
-		m.follows = updatedModel.(follows.Model)
-		cmd = followsCmd
+		m.follows, cmd = updateSubModel(m.follows, msg)
 	case showFeedView:
-		updatedModel, feedCmd := m.feed.Update(msg)
-		m.feed = updatedModel.(feed.Model)
-		cmd = feedCmd
+		m.feed, cmd = updateSubModel(m.feed, msg)
+	case showAccountSelectView:
+		m.accountSelect, cmd = updateSubModel(m.accountSelect, msg)
+	case showSinceLastCheckView:
+		m.feed, cmd = updateSubModel(m.feed, msg)
 	}
 
 	return m, cmd
+}
+
+func updateSubModel[M tea.Model](model M, msg tea.Msg) (M, tea.Cmd) {
+	updated, cmd := model.Update(msg)
+	return updated.(M), cmd
 }
 
 func (m MainModel) View() tea.View {
@@ -156,8 +316,34 @@ func (m MainModel) View() tea.View {
 		return m.follows.View()
 	case showFeedView:
 		return m.feed.View()
+	case showAccountSelectView:
+		return m.accountSelect.View()
+	case showSinceLastCheckView:
+		return m.feed.View()
+	case showLoadingView:
+		return m.loading.View()
 	default:
 		return tea.NewView("Unknown state")
+	}
+}
+
+func fetchSinceLastCheckCmd(handle string, lastCheck string) tea.Cmd {
+	return func() tea.Msg {
+		client := bsk.NewClient()
+		posts, _, err := bsk.GetAuthorFeedCursor(context.Background(), client, handle, "", 50)
+		if err != nil {
+			return PostsFetchedMsg{handle: handle, err: err}
+		}
+		if lastCheck == "" {
+			return PostsFetchedMsg{handle: handle, posts: posts}
+		}
+		filtered := make([]bsk.PostInfo, 0, len(posts))
+		for _, p := range posts {
+			if p.IndexedAt > lastCheck {
+				filtered = append(filtered, p)
+			}
+		}
+		return PostsFetchedMsg{handle: handle, posts: filtered}
 	}
 }
 
