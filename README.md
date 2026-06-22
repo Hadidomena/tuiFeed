@@ -1,26 +1,30 @@
 # tuiFeed
 
-A terminal-based (TUI) feed reader for Bluesky.
+A TUI feed reader for Bluesky.
 
 ## Features
 
-- Browse posts from followed Bluesky accounts in the terminal
-- View images directly in the terminal (Kitty graphics protocol or Sixel)
-- Add/remove followed accounts via an interactive UI
+- Browse posts from followed Bluesky accounts in the terminal, either as posts since last check or as a group of a few last post from every followed profile.
+- View images directly in the terminal (using Kitty graphics protocol or Sixel)
+- In case of terminal not supporting image display you may open those images externally
+- Add/remove followed accounts via an UI
 - Keyboard-driven navigation (j/k, arrows)
-- No authentication required — uses the public Bluesky API
+- No authentication or account required — uses the public Bluesky API
+- Removes 
 
 ## Requirements
 
 - Go 1.25+
-- A terminal with [Kitty graphics](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [Sixel](https://en.wikipedia.org/wiki/Sixel) support for in-terminal image rendering (optional; images can also be opened externally)
+
+## Optional Requirements
+- A terminal with [Kitty graphics](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [Sixel](https://en.wikipedia.org/wiki/Sixel) support for in-terminal image rendering.
 
 ## Install
 
 ```bash
 go install github.com/Hadidomena/tuiFeed@latest
 ```
-
+ 
 ## Build from source
 
 ```bash
