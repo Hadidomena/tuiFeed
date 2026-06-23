@@ -10,7 +10,7 @@ A TUI feed reader for Bluesky.
 - Add/remove followed accounts via a UI
 - Keyboard-driven navigation (j/k, arrows)
 - No authentication or account required — uses the public Bluesky API
-- Removes 
+- Removes access to unfiltered feed which may capture your attention for unplanned, long amounts of scrolling
 
 ## Requirements
 
