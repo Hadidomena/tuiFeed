@@ -4,13 +4,13 @@ A TUI feed reader for Bluesky.
 
 ## Features
 
-- Browse posts from followed Bluesky accounts in the terminal, either as posts since last check or as a group of a few last post from every followed profile.
+- Browse posts from followed Bluesky accounts in the terminal, either as posts since last check or as a group of a few last posts from every followed profile.
 - View images directly in the terminal (using Kitty graphics protocol or Sixel)
-- In case of terminal not supporting image display you may open those images externally
-- Add/remove followed accounts via an UI
+- In case of your terminal not supporting in-terminal image display you may open those images externally
+- Add/remove followed accounts via a UI
 - Keyboard-driven navigation (j/k, arrows)
 - No authentication or account required — uses the public Bluesky API
-- Removes 
+- Removes access to unfiltered feed which may capture your attention for unplanned, long amounts of scrolling
 
 ## Requirements
 
