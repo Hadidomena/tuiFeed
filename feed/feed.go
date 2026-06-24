@@ -114,6 +114,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor >= m.scrollPos+m.pageSize {
 					m.scrollPos++
 				}
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "up", "k":
 			if m.cursor > 0 {
@@ -121,6 +126,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < m.scrollPos {
 					m.scrollPos--
 				}
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "left", "h":
 			if m.hasRendered && m.imgCursor > 0 {
