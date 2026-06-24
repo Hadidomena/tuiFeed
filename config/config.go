@@ -11,7 +11,7 @@ import (
 type Config struct {
 	Follows    []string          `json:"follows"`
 	LastChecks map[string]string `json:"last_checks"`
-	SavedPosts []string          `json:"SavedPosts"`
+	SavedPosts []string          `json:"saved_posts"`
 }
 
 func (c *Config) SetLastCheck(handle string) {
