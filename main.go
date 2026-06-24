@@ -266,12 +266,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cfg.LastChecks != nil {
 			lastCheck = m.cfg.LastChecks[msg.handle]
 		}
-		m.cfg.SetLastCheck(msg.handle)
-		err := m.cfg.Save()
-		if err != nil {
-			fmt.Printf("Error while saving the check for @%s", msg.handle)
-		}
-		return m, fetchSinceLastCheckCmd(msg.handle, lastCheck)
+		return m, fetchSinceLastCheckCmd(msg.handle, lastCheck, m)
 	case PostsFetchedMsg:
 		m.state = showSinceLastCheckView
 		if msg.err != nil {
@@ -327,13 +322,14 @@ func (m MainModel) View() tea.View {
 	}
 }
 
-func fetchSinceLastCheckCmd(handle string, lastCheck string) tea.Cmd {
+func fetchSinceLastCheckCmd(handle string, lastCheck string, m MainModel) tea.Cmd {
 	return func() tea.Msg {
 		client := bsk.NewClient()
 		posts, _, err := bsk.GetAuthorFeedCursor(context.Background(), client, handle, "", 50)
 		if err != nil {
 			return PostsFetchedMsg{handle: handle, err: err}
 		}
+		m.cfg.SetLastCheck(handle)
 		if lastCheck == "" {
 			return PostsFetchedMsg{handle: handle, posts: posts}
 		}
