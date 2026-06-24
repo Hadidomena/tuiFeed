@@ -91,7 +91,7 @@ func (m DashboardModel) View() tea.View {
 		if m.cursor == i {
 			cursor = "> "
 		}
-		s += fmt.Sprintf("%s%s\n", cursor, choice)
+		s += fmt.Sprintf("%s  %s\n", cursor, choice)
 	}
 	s += "\nPress q to quit.\n"
 	return tea.NewView(s)

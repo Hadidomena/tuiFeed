@@ -192,7 +192,7 @@ func (m Model) renderAttachment() tea.Msg {
 	}
 	return imageRenderedMsg{
 		imageRows: rows,
-		status:    fmt.Sprintf("Image %d/%d  [\u2190/\u2192] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
+		status:    fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
 	}
 }
 
@@ -223,7 +223,7 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 
 	b.WriteString(m.title + "\n")
-	b.WriteString(strings.Repeat("\u2500", 30))
+	b.WriteString(strings.Repeat("─", 30))
 	b.WriteString("\n\n")
 
 	if m.loading {
@@ -283,6 +283,12 @@ func (m Model) View() tea.View {
 		if end < len(m.posts) {
 			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.posts)-end))
 		}
+		idx := m.cursor
+		if idx >= len(m.posts) {
+			idx = 0
+		}
+		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
+		b.WriteString(bsk.FormatPost(m.posts[idx]))
 	}
 
 	if m.hasRendered && m.imageRows > 0 {
@@ -294,10 +300,9 @@ func (m Model) View() tea.View {
 	}
 
 	if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
-		b.WriteString("\n[\u2190/\u2192] prev/next image  [o] open externally  [esc] back  [q] quit\n")
+		b.WriteString("\n[←/→] prev/next image  [o] open externally  [esc] back  [q] quit\n")
 	} else {
 		b.WriteString("\n[a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
-
 	return tea.NewView(b.String())
 }
