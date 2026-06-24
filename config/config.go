@@ -18,7 +18,7 @@ func (c *Config) SetLastCheck(handle string) {
 	if c.LastChecks == nil {
 		c.LastChecks = make(map[string]string)
 	}
-	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339)
+	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339Nano)
 }
 
 func configPath() (string, error) {

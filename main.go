@@ -1,12 +1,11 @@
 package main
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
 	"os"
 	"strings"
-
-	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
