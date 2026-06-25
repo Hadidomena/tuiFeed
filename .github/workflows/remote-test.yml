@@ -19,7 +19,6 @@ jobs:
           - ./bsk
           - ./config
           - ./feed
-          - ./saved
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
