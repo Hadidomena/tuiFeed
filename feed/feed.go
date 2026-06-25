@@ -31,11 +31,14 @@ type Model struct {
 	client      *xrpc.Client
 	posts       []bsk.FeedItem
 	cursor      int
+	scrollPos   int
+	pageSize    int
 	imgCursor   int
 	loading     bool
 	statusMsg   string
 	hasRendered bool
 	imageRows   int
+	title       string
 }
 
 func NewModel() (Model, error) {
@@ -44,17 +47,33 @@ func NewModel() (Model, error) {
 		return Model{}, err
 	}
 	return Model{
-		cfg:     cfg,
-		client:  bsk.NewClient(),
-		loading: true,
+		cfg:      cfg,
+		client:   bsk.NewClient(),
+		loading:  true,
+		pageSize: 10,
+		title:    "Feed",
 	}, nil
 }
 
+func NewStaticModel(posts []bsk.FeedItem, title string) Model {
+	return Model{
+		posts:    posts,
+		pageSize: 10,
+		title:    title,
+	}
+}
+
 func (m Model) Init() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
 	return m.loadPosts
 }
 
 func (m Model) loadPosts() tea.Msg {
+	if m.cfg == nil || m.client == nil {
+		return loadErrorMsg("Not available in this view.")
+	}
 	ctx := context.Background()
 
 	if len(m.cfg.Follows) == 0 {
@@ -89,18 +108,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.imageRows = 0
 			bsk.ClearImages()
 			return m, func() tea.Msg { return BackMsg{} }
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+		case "down", "j":
+			if m.cursor < len(m.posts)-1 {
+				m.cursor++
+				if m.cursor >= m.scrollPos+m.pageSize {
+					m.scrollPos++
+				}
 				m.imgCursor = 0
 				m.hasRendered = false
 				m.imageRows = 0
 				m.statusMsg = ""
 				bsk.ClearImages()
 			}
-		case "down", "j":
-			if m.cursor < len(m.posts)-1 {
-				m.cursor++
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+				if m.cursor < m.scrollPos {
+					m.scrollPos--
+				}
 				m.imgCursor = 0
 				m.hasRendered = false
 				m.imageRows = 0
@@ -128,11 +153,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "Opening image externally..."
 				return m, m.openAttachment
 			}
+		case "s":
+			// TOFINISH config.savePost(handles)
 		case "r":
 			m.loading = true
 			m.statusMsg = ""
 			m.hasRendered = false
 			m.imageRows = 0
+			m.scrollPos = 0
 			bsk.ClearImages()
 			return m, m.loadPosts
 		}
@@ -141,6 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.cursor = 0
 		m.imgCursor = 0
+		m.scrollPos = 0
 		m.hasRendered = false
 		m.imageRows = 0
 		if len(msg) == 0 {
@@ -203,7 +232,7 @@ func (m Model) openAttachment() tea.Msg {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("Feed\n")
+	b.WriteString(m.title + "\n")
 	b.WriteString(strings.Repeat("─", 30))
 	b.WriteString("\n\n")
 
@@ -215,6 +244,55 @@ func (m Model) View() tea.View {
 	if len(m.posts) == 0 {
 		b.WriteString("No posts to display.\n")
 	} else {
+		b.WriteString(fmt.Sprintf("%d posts\n\n", len(m.posts)))
+
+		end := m.scrollPos + m.pageSize
+		if end > len(m.posts) {
+			end = len(m.posts)
+		}
+
+		for i := m.scrollPos; i < end; i++ {
+			post := m.posts[i]
+			cursor := "  "
+			if m.cursor == i {
+				cursor = "> "
+			}
+
+			createdAt := post.IndexedAt
+			if createdAt == "" {
+				createdAt = post.CreatedAt
+			}
+			if len(createdAt) > 10 {
+				createdAt = createdAt[:10]
+			}
+
+			author := post.AuthorDisplayName
+			if author == "" {
+				author = post.AuthorHandle
+			}
+
+			b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
+				cursor, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
+
+			text := strings.TrimSpace(post.Text)
+			if len(text) > 120 {
+				text = text[:120] + "..."
+			}
+			text = strings.ReplaceAll(text, "\n", " ")
+			b.WriteString(fmt.Sprintf("    %s\n", text))
+
+			if len(post.Embeds) > 0 {
+				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
+			}
+			b.WriteString("\n")
+		}
+
+		if m.scrollPos > 0 {
+			b.WriteString(fmt.Sprintf("  ... %d more above\n", m.scrollPos))
+		}
+		if end < len(m.posts) {
+			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.posts)-end))
+		}
 		idx := m.cursor
 		if idx >= len(m.posts) {
 			idx = 0

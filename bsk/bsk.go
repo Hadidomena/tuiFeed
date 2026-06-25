@@ -19,6 +19,7 @@ type PostInfo struct {
 	LikeCount         int64
 	ReplyCount        int64
 	CreatedAt         string
+	IndexedAt         string
 	Embeds            []string
 }
 
@@ -82,6 +83,7 @@ func ExtractPostInfo(post *bsky.FeedDefs_PostView) PostInfo {
 		AuthorHandle: post.Author.Handle,
 		LikeCount:    int64Val(post.LikeCount),
 		ReplyCount:   int64Val(post.ReplyCount),
+		IndexedAt:    post.IndexedAt,
 	}
 	if post.Author.DisplayName != nil {
 		info.AuthorDisplayName = *post.Author.DisplayName
@@ -114,8 +116,7 @@ func GetExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
 
 type FeedItem struct {
 	PostInfo
-	URI       string
-	IndexedAt string
+	URI string
 }
 
 func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit int64) ([]FeedItem, error) {
@@ -131,9 +132,8 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 		}
 		info := ExtractPostInfo(fvp.Post)
 		items = append(items, FeedItem{
-			PostInfo:  info,
-			URI:       fvp.Post.Uri,
-			IndexedAt: fvp.Post.IndexedAt,
+			PostInfo: info,
+			URI:      fvp.Post.Uri,
 		})
 	}
 	return items, nil
@@ -182,4 +182,26 @@ func int64Val(p *int64) int64 {
 		return *p
 	}
 	return 0
+}
+
+func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string, cursor string, limit int64) ([]PostInfo, string, error) {
+	d, err := atproto.IdentityResolveHandle(ctx, client, handle)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolving %s: %w", handle, err)
+	}
+	out, err := bsky.FeedGetAuthorFeed(ctx, client, d.Did, cursor, "posts_with_replies", false, limit)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetching feed for %s: %w", handle, err)
+	}
+	posts := make([]PostInfo, 0, len(out.Feed))
+	for _, f := range out.Feed {
+		if f.Post != nil {
+			posts = append(posts, ExtractPostInfo(f.Post))
+		}
+	}
+	nextCursor := ""
+	if out.Cursor != nil {
+		nextCursor = *out.Cursor
+	}
+	return posts, nextCursor, nil
 }
