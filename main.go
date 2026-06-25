@@ -204,11 +204,13 @@ func NewMainModel() MainModel {
 	}
 	fm, err := follows.NewModel()
 	if err != nil {
-		fm, _ = follows.NewModel()
+		fmt.Fprintf(os.Stderr, "Error initializing follows: %v\n", err)
+		os.Exit(1)
 	}
 	fd, err := feed.NewModel()
 	if err != nil {
-		fd, _ = feed.NewModel()
+		fmt.Fprintf(os.Stderr, "Error initializing feed: %v\n", err)
+		os.Exit(1)
 	}
 	return MainModel{
 		state:     showDashboardView,
@@ -329,6 +331,7 @@ func fetchSinceLastCheckCmd(handle string, lastCheck string, m MainModel) tea.Cm
 			return PostsFetchedMsg{handle: handle, err: err}
 		}
 		m.cfg.SetLastCheck(handle)
+		_ = m.cfg.Save()
 		if lastCheck == "" {
 			return PostsFetchedMsg{handle: handle, posts: posts}
 		}
