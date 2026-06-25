@@ -18,7 +18,7 @@ func (c *Config) SetLastCheck(handle string) {
 	if c.LastChecks == nil {
 		c.LastChecks = make(map[string]string)
 	}
-	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339Nano)
+	c.LastChecks[handle] = time.Now().UTC().Format(time.RFC3339)
 }
 
 func configPath() (string, error) {
@@ -79,21 +79,6 @@ func (c *Config) RemoveFollow(index int) {
 	if c.LastChecks != nil {
 		delete(c.LastChecks, handle)
 	}
-}
-
-func (c *Config) GetLastCheck(handle string) time.Time {
-	if c.LastChecks == nil {
-		return time.Time{}
-	}
-	s, ok := c.LastChecks[handle]
-	if !ok {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }
 
 func (c *Config) SavePost(post string) {
