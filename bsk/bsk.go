@@ -116,8 +116,7 @@ func GetExtantEmbeds(Post *bsky.FeedDefs_PostView) []string {
 
 type FeedItem struct {
 	PostInfo
-	URI       string
-	IndexedAt string
+	URI string
 }
 
 func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit int64) ([]FeedItem, error) {
@@ -133,9 +132,8 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 		}
 		info := ExtractPostInfo(fvp.Post)
 		items = append(items, FeedItem{
-			PostInfo:  info,
-			URI:       fvp.Post.Uri,
-			IndexedAt: fvp.Post.IndexedAt,
+			PostInfo: info,
+			URI:      fvp.Post.Uri,
 		})
 	}
 	return items, nil
