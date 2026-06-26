@@ -703,12 +703,16 @@ func TestGetAuthorFeed_error(t *testing.T) {
 }
 
 func TestDetectImageProtocol_kittyWindowId(t *testing.T) {
-	orig := os.Getenv("KITTY_WINDOW_ID")
+	orig1 := os.Getenv("KITTY_WINDOW_ID")
+	orig2 := os.Getenv("TERM_PROGRAM")
+	orig3 := os.Getenv("TERM")
+	defer func() {
+		os.Setenv("KITTY_WINDOW_ID", orig1)
+		os.Setenv("TERM_PROGRAM", orig2)
+		os.Setenv("TERM", orig3)
+	}()
 	os.Setenv("TERM_PROGRAM", "")
 	os.Setenv("TERM", "")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig)
-	}()
 
 	detectedProto = -1
 	os.Setenv("KITTY_WINDOW_ID", "1234")

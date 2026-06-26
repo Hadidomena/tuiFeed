@@ -340,6 +340,7 @@ func TestNewModel_loadError(t *testing.T) {
 	if err != nil {
 		return
 	}
+	t.Fatal("expected error, got nil")
 }
 
 func TestUpdateList_dSaveError(t *testing.T) {
@@ -349,6 +350,7 @@ func TestUpdateList_dSaveError(t *testing.T) {
 		t.Fatalf("NewModel: %v", err)
 	}
 	orig := os.Getenv("XDG_CONFIG_HOME")
+	defer os.Setenv("XDG_CONFIG_HOME", orig)
 	tmp := t.TempDir()
 	os.Setenv("XDG_CONFIG_HOME", tmp)
 	if err := os.MkdirAll(tmp+"/tuiFeed", 0o000); err != nil {
@@ -359,8 +361,6 @@ func TestUpdateList_dSaveError(t *testing.T) {
 	if len(m.cfg.Follows) != 1 {
 		t.Fatalf("expected 1 follow, got %d", len(m.cfg.Follows))
 	}
-
-	os.Setenv("XDG_CONFIG_HOME", orig)
 }
 
 func TestUpdateInput_enterSaveError(t *testing.T) {
@@ -373,6 +373,7 @@ func TestUpdateInput_enterSaveError(t *testing.T) {
 	m.input = "newuser.bsky.social"
 
 	orig := os.Getenv("XDG_CONFIG_HOME")
+	defer os.Setenv("XDG_CONFIG_HOME", orig)
 	tmp := t.TempDir()
 	os.Setenv("XDG_CONFIG_HOME", tmp)
 	if err := os.MkdirAll(tmp+"/tuiFeed", 0o000); err != nil {
@@ -380,6 +381,4 @@ func TestUpdateInput_enterSaveError(t *testing.T) {
 	}
 
 	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-
-	os.Setenv("XDG_CONFIG_HOME", orig)
 }

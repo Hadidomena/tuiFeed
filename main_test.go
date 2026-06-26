@@ -274,9 +274,8 @@ func TestLoadingView(t *testing.T) {
 
 func TestUpdateSubModel(t *testing.T) {
 	d := NewDashboardModel()
-	updated, cmd := updateSubModel(d, tea.KeyPressMsg{Code: 'q'})
+	_, cmd := updateSubModel(d, tea.KeyPressMsg{Code: 'q'})
 	if cmd == nil {
 		t.Fatal("expected command from updateSubModel")
 	}
-	_ = updated
 }
