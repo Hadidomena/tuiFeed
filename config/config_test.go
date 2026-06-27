@@ -82,3 +82,103 @@ func TestLoadMissing(t *testing.T) {
 		t.Errorf("expected empty follows, got %v", cfg.Follows)
 	}
 }
+
+func TestSetLastCheck(t *testing.T) {
+	cfg := &Config{}
+	cfg.SetLastCheck("test.bsky.social")
+	if cfg.LastChecks == nil {
+		t.Fatal("expected LastChecks map to be initialized")
+	}
+	if cfg.LastChecks["test.bsky.social"] == "" {
+		t.Fatal("expected LastCheck for test.bsky.social to be set")
+	}
+	cfg.SetLastCheck("another.bsky.social")
+	if len(cfg.LastChecks) != 2 {
+		t.Errorf("expected 2 last checks, got %d", len(cfg.LastChecks))
+	}
+}
+
+func TestSetLastCheck_existingMap(t *testing.T) {
+	cfg := &Config{LastChecks: map[string]string{"existing": "2024-01-01T00:00:00Z"}}
+	cfg.SetLastCheck("test.bsky.social")
+	if cfg.LastChecks["existing"] != "2024-01-01T00:00:00Z" {
+		t.Errorf("existing entry was overwritten")
+	}
+}
+
+func TestRemoveFollow_withLastChecks(t *testing.T) {
+	cfg := &Config{
+		Follows:    []string{"a", "b", "c"},
+		LastChecks: map[string]string{"a": "t1", "b": "t2", "c": "t3"},
+	}
+	cfg.RemoveFollow(1)
+	if _, ok := cfg.LastChecks["b"]; ok {
+		t.Errorf("expected last check for removed handle 'b' to be deleted")
+	}
+	if cfg.LastChecks["a"] != "t1" || cfg.LastChecks["c"] != "t3" {
+		t.Errorf("remaining last checks are wrong")
+	}
+}
+
+func TestRemoveFollow_nilLastChecks(t *testing.T) {
+	cfg := &Config{Follows: []string{"a", "b"}}
+	cfg.RemoveFollow(0)
+	if len(cfg.Follows) != 1 {
+		t.Fatalf("expected 1 follow, got %d", len(cfg.Follows))
+	}
+}
+
+func TestLoad_invalidJSON(t *testing.T) {
+	tmp := t.TempDir()
+	orig := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	defer os.Setenv("XDG_CONFIG_HOME", orig)
+
+	if err := os.MkdirAll(filepath.Join(tmp, "tuiFeed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "tuiFeed", "follows.json"), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestLoad_readError(t *testing.T) {
+	tmp := t.TempDir()
+	orig := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	defer os.Setenv("XDG_CONFIG_HOME", orig)
+
+	if err := os.MkdirAll(filepath.Join(tmp, "tuiFeed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tmp, "tuiFeed", "follows.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for unreadable config")
+	}
+}
+
+func TestSave_mkdirError(t *testing.T) {
+	tmp := t.TempDir()
+	orig := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	defer os.Setenv("XDG_CONFIG_HOME", orig)
+
+	if err := os.WriteFile(filepath.Join(tmp, "tuiFeed"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{Follows: []string{"test.bsky.social"}}
+	err := cfg.Save()
+	if err == nil {
+		t.Fatal("expected mkdir error when tuiFeed is a file")
+	}
+}

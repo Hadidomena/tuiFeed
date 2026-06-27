@@ -34,3 +34,18 @@ func TestStrVal(t *testing.T) {
 		t.Fatalf("Incorrect conversion of type other than pointer")
 	}
 }
+
+func TestStrVal_nilPointer(t *testing.T) {
+	var nilPtr *string
+	result := StrVal(nilPtr)
+	if result != "" {
+		t.Errorf("expected empty string for nil pointer, got %q", result)
+	}
+}
+
+func TestStrVal_string(t *testing.T) {
+	result := StrVal("hello")
+	if result != "hello" {
+		t.Errorf("expected 'hello', got %q", result)
+	}
+}
