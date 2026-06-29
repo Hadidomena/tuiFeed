@@ -88,13 +88,6 @@ func (c *Config) SavePost(uri string) {
 	c.SavedPosts = append(c.SavedPosts, uri)
 }
 
-func (c *Config) RemoveSavedPost(index int) {
-	if index < 0 || index >= len(c.SavedPosts) {
-		return
-	}
-	c.SavedPosts = append(c.SavedPosts[:index], c.SavedPosts[index+1:]...)
-}
-
 func (c *Config) RemoveSavedPostByURI(uri string) {
 	for i, u := range c.SavedPosts {
 		if u == uri {

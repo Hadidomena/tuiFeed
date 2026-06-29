@@ -391,7 +391,11 @@ func (m Model) View() tea.View {
 	}
 
 	if m.isSavedView {
-		b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
+			b.WriteString("\n[←/→] prev/next image  [s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		} else {
+			b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		}
 	} else if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
 		b.WriteString("\n[←/→] prev/next image  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
 	} else {
