@@ -81,6 +81,38 @@ func (c *Config) RemoveFollow(index int) {
 	}
 }
 
-func (c *Config) SavePost(post string) {
+func (c *Config) SavePost(uri string) {
+	if slices.Contains(c.SavedPosts, uri) {
+		return
+	}
+	c.SavedPosts = append(c.SavedPosts, uri)
+}
 
+func (c *Config) RemoveSavedPost(index int) {
+	if index < 0 || index >= len(c.SavedPosts) {
+		return
+	}
+	c.SavedPosts = append(c.SavedPosts[:index], c.SavedPosts[index+1:]...)
+}
+
+func (c *Config) RemoveSavedPostByURI(uri string) {
+	for i, u := range c.SavedPosts {
+		if u == uri {
+			c.SavedPosts = append(c.SavedPosts[:i], c.SavedPosts[i+1:]...)
+			return
+		}
+	}
+}
+
+func (c *Config) IsSaved(uri string) bool {
+	return slices.Contains(c.SavedPosts, uri)
+}
+
+func (c *Config) GetSavedPostURIs() []string {
+	if c.SavedPosts == nil {
+		return nil
+	}
+	result := make([]string, len(c.SavedPosts))
+	copy(result, c.SavedPosts)
+	return result
 }
