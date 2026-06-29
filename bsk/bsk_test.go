@@ -989,3 +989,145 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 		t.Errorf("expected cursor 'next-cursor', got %q", cursor)
 	}
 }
+
+func TestGetPosts_success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
+			Posts: []*bsky.FeedDefs_PostView{
+				{
+					Uri:       "at://did:plc:test/app.bsky.feed.post/1",
+					Cid:       "bafy-test",
+					IndexedAt: "2024-06-01T12:00:00Z",
+					Author: &bsky.ActorDefs_ProfileViewBasic{
+						Did:         "did:plc:test",
+						Handle:      "test.bsky.social",
+						DisplayName: ptr("Test User"),
+					},
+					Record: &util.LexiconTypeDecoder{
+						Val: &bsky.FeedPost{
+							Text:      "Hello from getPosts",
+							CreatedAt: "2024-06-01T12:00:00Z",
+						},
+					},
+					LikeCount:  ptr[int64](42),
+					ReplyCount: ptr[int64](7),
+				},
+				{
+					Uri:       "at://did:plc:test/app.bsky.feed.post/2",
+					Cid:       "bafy-test2",
+					IndexedAt: "2024-06-02T12:00:00Z",
+					Author: &bsky.ActorDefs_ProfileViewBasic{
+						Did:    "did:plc:test",
+						Handle: "test.bsky.social",
+					},
+					Record: &util.LexiconTypeDecoder{
+						Val: &bsky.FeedPost{
+							Text:      "Second post",
+							CreatedAt: "2024-06-02T12:00:00Z",
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].URI != "at://did:plc:test/app.bsky.feed.post/1" {
+		t.Errorf("expected URI, got %q", items[0].URI)
+	}
+	if items[0].Text != "Hello from getPosts" {
+		t.Errorf("expected 'Hello from getPosts', got %q", items[0].Text)
+	}
+	if items[1].Text != "Second post" {
+		t.Errorf("expected 'Second post', got %q", items[1].Text)
+	}
+}
+
+func TestGetPosts_empty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
+			Posts: []*bsky.FeedDefs_PostView{},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	items, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestGetPosts_nilEntries(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
+			Posts: []*bsky.FeedDefs_PostView{
+				nil,
+				{
+					Uri:       "at://did:plc:test/app.bsky.feed.post/1",
+					Cid:       "bafy-test",
+					IndexedAt: "2024-06-01T12:00:00Z",
+					Author: &bsky.ActorDefs_ProfileViewBasic{
+						Did:    "did:plc:test",
+						Handle: "test.bsky.social",
+					},
+					Record: &util.LexiconTypeDecoder{
+						Val: &bsky.FeedPost{
+							Text:      "Real post",
+							CreatedAt: "2024-06-01T12:00:00Z",
+						},
+					},
+				},
+				nil,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2", "at://uri/3"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item after skipping nil, got %d", len(items))
+	}
+	if items[0].Text != "Real post" {
+		t.Errorf("expected 'Real post', got %q", items[0].Text)
+	}
+}
+
+func TestGetPosts_error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
+	if err == nil {
+		t.Fatal("expected error for failed fetch")
+	}
+}
