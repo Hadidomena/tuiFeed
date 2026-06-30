@@ -182,3 +182,95 @@ func TestSave_mkdirError(t *testing.T) {
 		t.Fatal("expected mkdir error when tuiFeed is a file")
 	}
 }
+
+func TestSavePost(t *testing.T) {
+	cfg := &Config{}
+	cfg.SavePost("at://did:plc:abc/app.bsky.feed.post/1")
+	cfg.SavePost("at://did:plc:abc/app.bsky.feed.post/2")
+
+	if len(cfg.SavedPosts) != 2 {
+		t.Fatalf("expected 2 saved posts, got %d", len(cfg.SavedPosts))
+	}
+	if cfg.SavedPosts[0] != "at://did:plc:abc/app.bsky.feed.post/1" {
+		t.Errorf("unexpected first URI: %s", cfg.SavedPosts[0])
+	}
+}
+
+func TestSavePost_duplicate(t *testing.T) {
+	cfg := &Config{}
+	cfg.SavePost("at://uri/1")
+	cfg.SavePost("at://uri/1")
+
+	if len(cfg.SavedPosts) != 1 {
+		t.Fatalf("expected 1 saved post after duplicate, got %d", len(cfg.SavedPosts))
+	}
+}
+
+func TestRemoveSavedPost(t *testing.T) {
+	cfg := &Config{SavedPosts: []string{"a", "b", "c"}}
+	cfg.RemoveSavedPost(1)
+
+	if len(cfg.SavedPosts) != 2 {
+		t.Fatalf("expected 2 saved posts, got %d", len(cfg.SavedPosts))
+	}
+	if cfg.SavedPosts[0] != "a" || cfg.SavedPosts[1] != "c" {
+		t.Errorf("unexpected saved posts: %v", cfg.SavedPosts)
+	}
+}
+
+func TestRemoveSavedPost_outOfBounds(t *testing.T) {
+	cfg := &Config{SavedPosts: []string{"a"}}
+	cfg.RemoveSavedPost(-1)
+	cfg.RemoveSavedPost(5)
+
+	if len(cfg.SavedPosts) != 1 {
+		t.Fatalf("expected 1 saved post, got %d", len(cfg.SavedPosts))
+	}
+}
+
+func TestRemoveSavedPostByURI(t *testing.T) {
+	cfg := &Config{SavedPosts: []string{"uri:a", "uri:b", "uri:c"}}
+	cfg.RemoveSavedPostByURI("uri:b")
+
+	if len(cfg.SavedPosts) != 2 {
+		t.Fatalf("expected 2 saved posts, got %d", len(cfg.SavedPosts))
+	}
+	if cfg.SavedPosts[0] != "uri:a" || cfg.SavedPosts[1] != "uri:c" {
+		t.Errorf("unexpected saved posts: %v", cfg.SavedPosts)
+	}
+
+	cfg.RemoveSavedPostByURI("nonexistent")
+	if len(cfg.SavedPosts) != 2 {
+		t.Fatalf("expected 2 saved posts, got %d", len(cfg.SavedPosts))
+	}
+}
+
+func TestIsSaved(t *testing.T) {
+	cfg := &Config{SavedPosts: []string{"uri:one", "uri:two"}}
+	if !cfg.IsSaved("uri:one") {
+		t.Error("expected uri:one to be saved")
+	}
+	if cfg.IsSaved("uri:three") {
+		t.Error("expected uri:three not to be saved")
+	}
+}
+
+func TestGetSavedPostURIs(t *testing.T) {
+	cfg := &Config{SavedPosts: []string{"a", "b", "c"}}
+	uris := cfg.GetSavedPostURIs()
+	if len(uris) != 3 {
+		t.Fatalf("expected 3 URIs, got %d", len(uris))
+	}
+	uris[0] = "modified"
+	if cfg.SavedPosts[0] == "modified" {
+		t.Error("GetSavedPostURIs should return a copy")
+	}
+}
+
+func TestGetSavedPostURIs_nil(t *testing.T) {
+	cfg := &Config{}
+	uris := cfg.GetSavedPostURIs()
+	if uris != nil {
+		t.Errorf("expected nil for uninitialized SavedPosts, got %v", uris)
+	}
+}

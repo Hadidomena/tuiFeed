@@ -15,8 +15,8 @@ func updateDashboard(m DashboardModel, msg tea.Msg) DashboardModel {
 
 func TestNewDashboardModel(t *testing.T) {
 	m := NewDashboardModel()
-	if len(m.choices) != 3 {
-		t.Errorf("expected 3 choices, got %d", len(m.choices))
+	if len(m.choices) != 4 {
+		t.Errorf("expected 4 choices, got %d", len(m.choices))
 	}
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0, got %d", m.cursor)
@@ -67,8 +67,12 @@ func TestDashboardUpdate_downJ(t *testing.T) {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
 	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if m.cursor != 2 {
-		t.Errorf("expected cursor still 2, got %d", m.cursor)
+	if m.cursor != 3 {
+		t.Errorf("expected cursor 3, got %d", m.cursor)
+	}
+	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.cursor != 3 {
+		t.Errorf("expected cursor still 3, got %d", m.cursor)
 	}
 }
 
@@ -78,10 +82,12 @@ func TestDashboardUpdate_enter(t *testing.T) {
 		wantFeed bool
 		wantSL   bool
 		wantMng  bool
+		wantSave bool
 	}{
-		{0, true, false, false},
-		{1, false, true, false},
-		{2, false, false, true},
+		{0, true, false, false, false},
+		{1, false, true, false, false},
+		{2, false, false, true, false},
+		{3, false, false, false, true},
 	}
 	for _, tt := range tests {
 		m := NewDashboardModel()
@@ -103,6 +109,10 @@ func TestDashboardUpdate_enter(t *testing.T) {
 		case tt.wantMng:
 			if _, ok := msg.(OpenFollowsMsg); !ok {
 				t.Errorf("cursor %d: expected OpenFollowsMsg, got %T", tt.cursor, msg)
+			}
+		case tt.wantSave:
+			if _, ok := msg.(OpenSavedPostsMsg); !ok {
+				t.Errorf("cursor %d: expected OpenSavedPostsMsg, got %T", tt.cursor, msg)
 			}
 		}
 	}

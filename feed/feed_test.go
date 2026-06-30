@@ -1,6 +1,9 @@
 package feed
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,6 +11,8 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
+	indigobsky "github.com/bluesky-social/indigo/api/bsky"
+	"github.com/bluesky-social/indigo/lex/util"
 )
 
 func TestNewStaticModel(t *testing.T) {
@@ -655,5 +660,429 @@ func TestOpenAttachment_oob(t *testing.T) {
 	}
 	if string(errMsg) != "No image to open" {
 		t.Errorf("expected 'No image to open', got %q", string(errMsg))
+	}
+}
+
+func TestUpdate_sKey_save(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	cfg := &config.Config{}
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "Saved!" {
+		t.Errorf("expected status 'Saved!', got %q", m.statusMsg)
+	}
+	if !cfg.IsSaved("at://uri/1") {
+		t.Error("expected URI to be saved")
+	}
+}
+
+func TestUpdate_sKey_unsave(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "Unsaved" {
+		t.Errorf("expected status 'Unsaved', got %q", m.statusMsg)
+	}
+	if cfg.IsSaved("at://uri/1") {
+		t.Error("expected URI to be unsaved")
+	}
+}
+
+func TestUpdate_sKey_noConfig(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	m := NewStaticModel(posts, "Test")
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "" {
+		t.Errorf("expected no status without config, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_sKey_noURI(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"}},
+	}
+	cfg := &config.Config{}
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "Cannot save post (no URI)" {
+		t.Errorf("expected 'Cannot save post (no URI)', got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_sKey_removeFromSaved(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m.isSavedView = true
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "Removed from saved" && m.statusMsg != "No saved posts" {
+		t.Errorf("expected removal status, got %q", m.statusMsg)
+	}
+	if len(m.posts) != 0 {
+		t.Errorf("expected 0 posts after removal, got %d", len(m.posts))
+	}
+	if cfg.IsSaved("at://uri/1") {
+		t.Error("expected URI to be removed from saved")
+	}
+}
+
+func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m.isSavedView = true
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "No saved posts" {
+		t.Errorf("expected 'No saved posts' after removing last, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_rKey_savedView(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"}},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.isSavedView = true
+	m, _ = update(m, tea.KeyPressMsg{Code: 'r'})
+
+	if m.loading {
+		t.Error("expected loading to stay false in saved view")
+	}
+}
+
+func TestNewSavedModel(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	cfg.SavePost("at://uri/2")
+	m := NewSavedModel(cfg)
+
+	if m.title != "Saved posts" {
+		t.Errorf("expected title 'Saved posts', got %q", m.title)
+	}
+	if !m.isSavedView {
+		t.Error("expected isSavedView to be true")
+	}
+	if !m.loading {
+		t.Error("expected loading to be true")
+	}
+	if m.client == nil {
+		t.Error("expected client to be set")
+	}
+}
+
+func TestUpdate_sKey_emptyPosts(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewStaticModel(nil, "Test")
+	m.cfg = cfg
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "" {
+		t.Errorf("expected no status for empty posts, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_sKey_cursorPastEnd(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	cfg := &config.Config{}
+	m := NewStaticModel(posts, "Test")
+	m.cfg = cfg
+	m.cursor = 5
+	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+
+	if m.statusMsg != "" {
+		t.Errorf("expected no status for cursor past end, got %q", m.statusMsg)
+	}
+}
+
+func TestWithConfig(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewStaticModel(nil, "Test")
+	m = m.WithConfig(cfg)
+
+	if m.cfg != cfg {
+		t.Error("expected cfg to be set")
+	}
+}
+
+func TestLoadSavedPosts_noConfig(t *testing.T) {
+	m := NewSavedModel(nil)
+	msg := m.loadSavedPosts()
+	errMsg, ok := msg.(loadErrorMsg)
+	if !ok {
+		t.Fatalf("expected loadErrorMsg, got %T", msg)
+	}
+	if string(errMsg) != "Not available in this view." {
+		t.Errorf("expected 'Not available in this view.', got %q", string(errMsg))
+	}
+}
+
+func TestLoadSavedPosts_noClient(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	m.client = nil
+	msg := m.loadSavedPosts()
+	errMsg, ok := msg.(loadErrorMsg)
+	if !ok {
+		t.Fatalf("expected loadErrorMsg, got %T", msg)
+	}
+	if string(errMsg) != "Not available in this view." {
+		t.Errorf("expected 'Not available in this view.', got %q", string(errMsg))
+	}
+}
+
+func TestLoadSavedPosts_emptyURIs(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewSavedModel(cfg)
+	msg := m.loadSavedPosts()
+	pl, ok := msg.(postsLoadedMsg)
+	if !ok {
+		t.Fatalf("expected postsLoadedMsg, got %T", msg)
+	}
+	if len(pl) != 0 {
+		t.Errorf("expected 0 posts, got %d", len(pl))
+	}
+}
+
+func TestInit_savedView(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	cmd := m.Init()
+	if cmd == nil {
+		t.Error("expected loadSavedPosts command for saved view")
+	}
+}
+
+func TestView_savedView(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Saved posts")
+	m.loading = false
+	m.cursor = 0
+	m.isSavedView = true
+	v := m.View()
+	if v.Content == "" {
+		t.Error("expected non-empty view")
+	}
+}
+
+func TestView_savedViewLoading(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	v := m.View()
+	if v.Content == "" {
+		t.Error("expected non-empty view")
+	}
+}
+
+func TestView_savedViewWithEmbeds(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+				Embeds:       []string{"a.jpg", "b.jpg"},
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Saved posts")
+	m.loading = false
+	m.cursor = 0
+	m.isSavedView = true
+	m.hasRendered = true
+	m.imageRows = 0
+	v := m.View()
+	if v.Content == "" {
+		t.Error("expected non-empty view")
+	}
+}
+
+func TestView_savedViewMultiEmbedsRendered(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+				Embeds:       []string{"a.jpg", "b.jpg"},
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Saved posts")
+	m.loading = false
+	m.cursor = 0
+	m.isSavedView = true
+	m.hasRendered = true
+	m.imageRows = 5
+	v := m.View()
+	if v.Content == "" {
+		t.Error("expected non-empty view")
+	}
+}
+
+func TestUpdate_savedPostsLoadedMsg(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	m.loading = true
+	m.cursor = 5
+	msg := postsLoadedMsg([]bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "a.bsky.social"}},
+		{PostInfo: bsk.PostInfo{AuthorHandle: "b.bsky.social"}},
+	})
+	m, cmd := update(m, msg)
+	if cmd != nil {
+		t.Error("expected no command")
+	}
+	if m.loading {
+		t.Error("expected loading false")
+	}
+	if m.cursor != 0 {
+		t.Errorf("expected cursor 0, got %d", m.cursor)
+	}
+	if len(m.posts) != 2 {
+		t.Errorf("expected 2 posts, got %d", len(m.posts))
+	}
+	if m.isSavedView != true {
+		t.Error("expected isSavedView to remain true")
+	}
+}
+
+func TestUpdate_savedPostsLoadedMsg_empty(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	m.loading = true
+	m, _ = update(m, postsLoadedMsg([]bsk.FeedItem{}))
+	if m.statusMsg != "No posts found." {
+		t.Errorf("expected 'No posts found.', got %q", m.statusMsg)
+	}
+	if m.isSavedView != true {
+		t.Error("expected isSavedView to remain true")
+	}
+}
+
+func TestUpdate_loadErrorMsg_savedView(t *testing.T) {
+	m := NewSavedModel(&config.Config{})
+	m.loading = true
+	m, _ = update(m, loadErrorMsg("saved error"))
+	if m.loading {
+		t.Error("expected loading false")
+	}
+	if m.statusMsg != "saved error" {
+		t.Errorf("expected error message, got %q", m.statusMsg)
+	}
+	if m.isSavedView != true {
+		t.Error("expected isSavedView to remain true")
+	}
+}
+
+func TestLoadSavedPosts_withURIs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&indigobsky.FeedGetPosts_Output{
+			Posts: []*indigobsky.FeedDefs_PostView{
+				{
+					Uri:       "at://uri/1",
+					IndexedAt: "2024-06-01T12:00:00Z",
+					Author: &indigobsky.ActorDefs_ProfileViewBasic{
+						Handle: "test.bsky.social",
+					},
+					Record: &util.LexiconTypeDecoder{
+						Val: &indigobsky.FeedPost{
+							Text:      "Saved post",
+							CreatedAt: "2024-06-01T12:00:00Z",
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	m := NewSavedModel(cfg)
+	m.client.Host = server.URL
+
+	msg := m.loadSavedPosts()
+	pl, ok := msg.(postsLoadedMsg)
+	if !ok {
+		t.Fatalf("expected postsLoadedMsg, got %T", msg)
+	}
+	if len(pl) != 1 {
+		t.Fatalf("expected 1 post, got %d", len(pl))
+	}
+	if pl[0].Text != "Saved post" {
+		t.Errorf("expected 'Saved post', got %q", pl[0].Text)
+	}
+	if pl[0].URI != "at://uri/1" {
+		t.Errorf("expected URI 'at://uri/1', got %q", pl[0].URI)
+	}
+}
+
+func TestLoadSavedPosts_error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{}
+	cfg.SavePost("at://uri/1")
+	m := NewSavedModel(cfg)
+	m.client.Host = server.URL
+
+	msg := m.loadSavedPosts()
+	errMsg, ok := msg.(loadErrorMsg)
+	if !ok {
+		t.Fatalf("expected loadErrorMsg, got %T", msg)
+	}
+	if len(string(errMsg)) == 0 {
+		t.Error("expected non-empty error message")
 	}
 }

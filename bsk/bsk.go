@@ -184,7 +184,7 @@ func int64Val(p *int64) int64 {
 	return 0
 }
 
-func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string, cursor string, limit int64) ([]PostInfo, string, error) {
+func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string, cursor string, limit int64) ([]FeedItem, string, error) {
 	d, err := atproto.IdentityResolveHandle(ctx, client, handle)
 	if err != nil {
 		return nil, "", fmt.Errorf("resolving %s: %w", handle, err)
@@ -193,10 +193,13 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 	if err != nil {
 		return nil, "", fmt.Errorf("fetching feed for %s: %w", handle, err)
 	}
-	posts := make([]PostInfo, 0, len(out.Feed))
+	posts := make([]FeedItem, 0, len(out.Feed))
 	for _, f := range out.Feed {
 		if f.Post != nil {
-			posts = append(posts, ExtractPostInfo(f.Post))
+			posts = append(posts, FeedItem{
+				PostInfo: ExtractPostInfo(f.Post),
+				URI:      f.Post.Uri,
+			})
 		}
 	}
 	nextCursor := ""
@@ -204,4 +207,21 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 		nextCursor = *out.Cursor
 	}
 	return posts, nextCursor, nil
+}
+
+func GetPosts(ctx context.Context, client *xrpc.Client, uris []string) ([]FeedItem, error) {
+	out, err := bsky.FeedGetPosts(ctx, client, uris)
+	if err != nil {
+		return nil, fmt.Errorf("fetching posts: %w", err)
+	}
+	posts := make([]FeedItem, 0, len(out.Posts))
+	for _, p := range out.Posts {
+		if p != nil {
+			posts = append(posts, FeedItem{
+				PostInfo: ExtractPostInfo(p),
+				URI:      p.Uri,
+			})
+		}
+	}
+	return posts, nil
 }

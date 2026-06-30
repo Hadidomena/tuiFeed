@@ -22,11 +22,13 @@ const (
 	showAccountSelectView
 	showSinceLastCheckView
 	showLoadingView
+	showSavedPostsView
 )
 
 type OpenFollowsMsg struct{}
 type OpenFeedMsg struct{}
 type OpenAccountSelectMsg struct{}
+type OpenSavedPostsMsg struct{}
 type BackToDashboardMsg struct{}
 
 type SelectAccountForSinceLastCheck struct {
@@ -35,7 +37,7 @@ type SelectAccountForSinceLastCheck struct {
 
 type PostsFetchedMsg struct {
 	handle string
-	posts  []bsk.PostInfo
+	posts  []bsk.FeedItem
 	err    error
 }
 
@@ -46,7 +48,7 @@ type DashboardModel struct {
 
 func NewDashboardModel() DashboardModel {
 	return DashboardModel{
-		choices: []string{"View Feed", "Posts since last check", "Manage follows"},
+		choices: []string{"View Feed", "Posts since last check", "Manage follows", "Saved posts"},
 	}
 }
 
@@ -77,6 +79,9 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.cursor == 2 {
 				return m, func() tea.Msg { return OpenFollowsMsg{} }
+			}
+			if m.cursor == 3 {
+				return m, func() tea.Msg { return OpenSavedPostsMsg{} }
 			}
 		}
 	}
@@ -248,6 +253,11 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.feed = fd
 		}
 		return m, m.feed.Init()
+	case OpenSavedPostsMsg:
+		m.state = showSavedPostsView
+		m.cfg, _ = config.Load()
+		m.feed = feed.NewSavedModel(m.cfg)
+		return m, m.feed.Init()
 	case feed.BackMsg:
 		m.state = showDashboardView
 		return m, nil
@@ -270,15 +280,11 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchSinceLastCheckCmd(msg.handle, lastCheck, m)
 	case PostsFetchedMsg:
 		m.state = showSinceLastCheckView
+		m.cfg, _ = config.Load()
 		if msg.err != nil {
-			var feedItems []bsk.FeedItem
-			m.feed = feed.NewStaticModel(feedItems, fmt.Sprintf("Error: %v", msg.err))
+			m.feed = feed.NewStaticModel(nil, fmt.Sprintf("Error: %v", msg.err))
 		} else {
-			feedItems := make([]bsk.FeedItem, 0, len(msg.posts))
-			for _, p := range msg.posts {
-				feedItems = append(feedItems, bsk.FeedItem{PostInfo: p})
-			}
-			m.feed = feed.NewStaticModel(feedItems, fmt.Sprintf("Posts since last check \u2014 @%s", msg.handle))
+			m.feed = feed.NewStaticModel(msg.posts, fmt.Sprintf("Posts since last check \u2014 @%s", msg.handle)).WithConfig(m.cfg)
 		}
 		return m, m.feed.Init()
 	}
@@ -293,6 +299,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case showAccountSelectView:
 		m.accountSelect, cmd = updateSubModel(m.accountSelect, msg)
 	case showSinceLastCheckView:
+		m.feed, cmd = updateSubModel(m.feed, msg)
+	case showSavedPostsView:
 		m.feed, cmd = updateSubModel(m.feed, msg)
 	}
 
@@ -316,6 +324,8 @@ func (m MainModel) View() tea.View {
 		return m.accountSelect.View()
 	case showSinceLastCheckView:
 		return m.feed.View()
+	case showSavedPostsView:
+		return m.feed.View()
 	case showLoadingView:
 		return m.loading.View()
 	default:
@@ -335,7 +345,7 @@ func fetchSinceLastCheckCmd(handle string, lastCheck string, m MainModel) tea.Cm
 		if lastCheck == "" {
 			return PostsFetchedMsg{handle: handle, posts: posts}
 		}
-		filtered := make([]bsk.PostInfo, 0, len(posts))
+		filtered := make([]bsk.FeedItem, 0, len(posts))
 		for _, p := range posts {
 			if p.IndexedAt > lastCheck {
 				filtered = append(filtered, p)

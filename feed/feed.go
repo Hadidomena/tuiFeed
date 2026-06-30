@@ -39,6 +39,7 @@ type Model struct {
 	hasRendered bool
 	imageRows   int
 	title       string
+	isSavedView bool
 }
 
 func NewModel() (Model, error) {
@@ -63,9 +64,28 @@ func NewStaticModel(posts []bsk.FeedItem, title string) Model {
 	}
 }
 
+func (m Model) WithConfig(cfg *config.Config) Model {
+	m.cfg = cfg
+	return m
+}
+
+func NewSavedModel(cfg *config.Config) Model {
+	return Model{
+		cfg:         cfg,
+		client:      bsk.NewClient(),
+		loading:     true,
+		pageSize:    10,
+		title:       "Saved posts",
+		isSavedView: true,
+	}
+}
+
 func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
+	}
+	if m.isSavedView {
+		return m.loadSavedPosts
 	}
 	return m.loadPosts
 }
@@ -94,6 +114,22 @@ func (m Model) loadPosts() tea.Msg {
 	})
 
 	return postsLoadedMsg(allPosts)
+}
+
+func (m Model) loadSavedPosts() tea.Msg {
+	if m.cfg == nil || m.client == nil {
+		return loadErrorMsg("Not available in this view.")
+	}
+	uris := m.cfg.GetSavedPostURIs()
+	if len(uris) == 0 {
+		return postsLoadedMsg(nil)
+	}
+	ctx := context.Background()
+	posts, err := bsk.GetPosts(ctx, m.client, uris)
+	if err != nil {
+		return loadErrorMsg(fmt.Sprintf("Error loading saved posts: %v", err))
+	}
+	return postsLoadedMsg(posts)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -154,8 +190,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openAttachment
 			}
 		case "s":
-			// TOFINISH config.savePost(handles)
+			if m.cfg == nil || len(m.posts) == 0 || m.cursor >= len(m.posts) {
+				return m, nil
+			}
+			uri := m.posts[m.cursor].URI
+			if uri == "" {
+				m.statusMsg = "Cannot save post (no URI)"
+				return m, nil
+			}
+			if m.isSavedView {
+				m.cfg.RemoveSavedPostByURI(uri)
+				m.posts = append(m.posts[:m.cursor], m.posts[m.cursor+1:]...)
+				if m.cursor >= len(m.posts) && m.cursor > 0 {
+					m.cursor--
+				}
+				if m.scrollPos >= len(m.posts) {
+					m.scrollPos = len(m.posts) - m.pageSize
+					if m.scrollPos < 0 {
+						m.scrollPos = 0
+					}
+				}
+				m.hasRendered = false
+				m.imageRows = 0
+				bsk.ClearImages()
+				_ = m.cfg.Save()
+				m.statusMsg = "Removed from saved"
+				if len(m.posts) == 0 {
+					m.statusMsg = "No saved posts"
+				}
+				return m, nil
+			}
+			if m.cfg.IsSaved(uri) {
+				m.cfg.RemoveSavedPostByURI(uri)
+				_ = m.cfg.Save()
+				m.statusMsg = "Unsaved"
+			} else {
+				m.cfg.SavePost(uri)
+				_ = m.cfg.Save()
+				m.statusMsg = "Saved!"
+			}
 		case "r":
+			if m.isSavedView {
+				return m, nil
+			}
 			m.loading = true
 			m.statusMsg = ""
 			m.hasRendered = false
@@ -237,7 +314,11 @@ func (m Model) View() tea.View {
 	b.WriteString("\n\n")
 
 	if m.loading {
-		b.WriteString("Loading posts...\n")
+		if m.isSavedView {
+			b.WriteString("Loading saved posts...\n")
+		} else {
+			b.WriteString("Loading posts...\n")
+		}
 		return tea.NewView(b.String())
 	}
 
@@ -309,10 +390,12 @@ func (m Model) View() tea.View {
 		b.WriteString(fmt.Sprintf("%s\n", m.statusMsg))
 	}
 
-	if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
-		b.WriteString("\n[←/→] prev/next image  [o] open externally  [esc] back  [q] quit\n")
+	if m.isSavedView {
+		b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+	} else if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
+		b.WriteString("\n[←/→] prev/next image  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
 	} else {
-		b.WriteString("\n[a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
 	return tea.NewView(b.String())
 }
