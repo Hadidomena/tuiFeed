@@ -85,7 +85,7 @@ func (c *Config) Save() error {
 func Update(fn func(*Config)) error {
 	cfg, err := Load()
 	if err != nil {
-		cfg = &Config{}
+		return err
 	}
 	fn(cfg)
 	return cfg.Save()
