@@ -340,9 +340,11 @@ func fetchSinceLastCheckCmd(handle string, lastCheck string) tea.Cmd {
 		if err != nil {
 			return PostsFetchedMsg{handle: handle, err: err}
 		}
-		_ = config.Update(func(cfg *config.Config) {
+		if err := config.Update(func(cfg *config.Config) {
 			cfg.SetLastCheck(handle)
-		})
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to update last-check for %s: %v\n", handle, err)
+		}
 		if lastCheck == "" {
 			return PostsFetchedMsg{handle: handle, posts: posts}
 		}
