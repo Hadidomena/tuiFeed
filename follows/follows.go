@@ -69,7 +69,6 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 	case "d":
 		if len(m.cfg.Follows) > 0 {
-			removed := m.cfg.Follows[m.cursor]
 			handle := m.cfg.Follows[m.cursor]
 			if err := config.Update(func(cfg *config.Config) {
 				idx := -1
@@ -95,7 +94,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.cursor >= len(m.cfg.Follows) && m.cursor > 0 {
 				m.cursor--
 			}
-			m.statusMsg = fmt.Sprintf("Removed @%s", removed)
+			m.statusMsg = fmt.Sprintf("Removed @%s", handle)
 		}
 	}
 	return m, nil

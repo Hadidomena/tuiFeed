@@ -203,9 +203,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isSavedView {
-				_ = config.Update(func(cfg *config.Config) {
+				if err := config.Update(func(cfg *config.Config) {
 					cfg.RemoveSavedPostByURI(uri)
-				})
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error removing saved post: %v", err)
+					return m, nil
+				}
 				m.posts = append(m.posts[:m.cursor], m.posts[m.cursor+1:]...)
 				if m.cursor >= len(m.posts) && m.cursor > 0 {
 					m.cursor--
@@ -230,14 +233,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.cfg.IsSaved(uri) {
-				_ = config.Update(func(cfg *config.Config) {
+				if err := config.Update(func(cfg *config.Config) {
 					cfg.RemoveSavedPostByURI(uri)
-				})
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error unsaving post: %v", err)
+					return m, nil
+				}
 				m.statusMsg = "Unsaved"
 			} else {
-				_ = config.Update(func(cfg *config.Config) {
+				if err := config.Update(func(cfg *config.Config) {
 					cfg.SavePost(uri)
-				})
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error saving post: %v", err)
+					return m, nil
+				}
 				m.statusMsg = "Saved!"
 			}
 			fresh, err := config.Load()

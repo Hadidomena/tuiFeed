@@ -73,13 +73,7 @@ func (c *Config) Save() error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, p); err != nil {
-		if err := os.Remove(p); err != nil {
-			return err
-		}
-		return os.Rename(tmpName, p)
-	}
-	return nil
+	return os.Rename(tmpName, p)
 }
 
 func Update(fn func(*Config)) error {
