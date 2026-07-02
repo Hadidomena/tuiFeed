@@ -139,7 +139,7 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func FormatPost(item FeedItem) string {
+func FormatPost(item FeedItem, imgCursor int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
 	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
@@ -149,8 +149,12 @@ func FormatPost(item FeedItem) string {
 
 	if len(item.Embeds) > 0 {
 		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
-		for _, embed := range item.Embeds {
-			b.WriteString(fmt.Sprintf("  %s\n", embed))
+		for i, embed := range item.Embeds {
+			marker := "  "
+			if i == imgCursor {
+				marker = "> "
+			}
+			b.WriteString(fmt.Sprintf("%s%s\n", marker, embed))
 		}
 	}
 

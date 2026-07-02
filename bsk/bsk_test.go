@@ -567,7 +567,7 @@ func TestFormatPost(t *testing.T) {
 		},
 		URI: "at://did:plc:test/app.bsky.feed.post/1",
 	}
-	result := FormatPost(item)
+	result := FormatPost(item, -1)
 	if !strings.Contains(result, "Test User") {
 		t.Errorf("expected display name in output")
 	}
@@ -589,7 +589,7 @@ func TestFormatPost_empty(t *testing.T) {
 	item := FeedItem{
 		PostInfo: PostInfo{},
 	}
-	result := FormatPost(item)
+	result := FormatPost(item, -1)
 	if !strings.Contains(result, "(@)") {
 		t.Errorf("expected empty handle format in output, got: %s", result)
 	}
