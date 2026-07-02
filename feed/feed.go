@@ -186,6 +186,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "o":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
+				if !m.hasRendered {
+					m.hasRendered = true
+					m.imgCursor = 0
+				}
 				m.statusMsg = "Opening image externally..."
 				return m, m.openAttachment
 			}
@@ -280,7 +284,7 @@ func (m Model) renderAttachment() tea.Msg {
 		return loadErrorMsg("No image to render")
 	}
 
-	postText := bsk.FormatPost(post)
+	postText := bsk.FormatPost(post, m.imgCursor)
 	postLines := strings.Count(postText, "\n")
 	yOffset := 5 + postLines
 
@@ -391,7 +395,11 @@ func (m Model) View() tea.View {
 			idx = 0
 		}
 		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
-		b.WriteString(bsk.FormatPost(m.posts[idx]))
+		cursor := -1
+		if m.hasRendered {
+			cursor = m.imgCursor
+		}
+		b.WriteString(bsk.FormatPost(m.posts[idx], cursor))
 	}
 
 	if m.hasRendered && m.imageRows > 0 {
