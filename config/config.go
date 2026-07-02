@@ -60,7 +60,20 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o644)
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
+}
+
+func Update(fn func(*Config)) error {
+	cfg, err := Load()
+	if err != nil {
+		cfg = &Config{}
+	}
+	fn(cfg)
+	return cfg.Save()
 }
 
 func (c *Config) AddFollow(handle string) {
