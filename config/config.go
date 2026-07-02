@@ -60,7 +60,7 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(p), "follows-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(p), "tuiFeed-*.tmp")
 	if err != nil {
 		return err
 	}
