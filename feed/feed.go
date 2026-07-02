@@ -199,7 +199,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isSavedView {
-				m.cfg.RemoveSavedPostByURI(uri)
+				_ = config.Update(func(cfg *config.Config) {
+					cfg.RemoveSavedPostByURI(uri)
+				})
 				m.posts = append(m.posts[:m.cursor], m.posts[m.cursor+1:]...)
 				if m.cursor >= len(m.posts) && m.cursor > 0 {
 					m.cursor--
@@ -213,21 +215,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.hasRendered = false
 				m.imageRows = 0
 				bsk.ClearImages()
-				_ = m.cfg.Save()
 				m.statusMsg = "Removed from saved"
 				if len(m.posts) == 0 {
 					m.statusMsg = "No saved posts"
 				}
+				fresh, err := config.Load()
+				if err == nil {
+					m.cfg = fresh
+				}
 				return m, nil
 			}
 			if m.cfg.IsSaved(uri) {
-				m.cfg.RemoveSavedPostByURI(uri)
-				_ = m.cfg.Save()
+				_ = config.Update(func(cfg *config.Config) {
+					cfg.RemoveSavedPostByURI(uri)
+				})
 				m.statusMsg = "Unsaved"
 			} else {
-				m.cfg.SavePost(uri)
-				_ = m.cfg.Save()
+				_ = config.Update(func(cfg *config.Config) {
+					cfg.SavePost(uri)
+				})
 				m.statusMsg = "Saved!"
+			}
+			fresh, err := config.Load()
+			if err == nil {
+				m.cfg = fresh
 			}
 		case "r":
 			if m.isSavedView {
@@ -257,6 +268,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = string(msg)
 	case imageRenderedMsg:
 		m.imageRows = msg.imageRows
+		m.statusMsg = msg.status
 	}
 
 	return m, nil
