@@ -567,7 +567,7 @@ func TestFormatPost(t *testing.T) {
 		},
 		URI: "at://did:plc:test/app.bsky.feed.post/1",
 	}
-	result := FormatPost(item)
+	result := FormatPost(item, -1)
 	if !strings.Contains(result, "Test User") {
 		t.Errorf("expected display name in output")
 	}
@@ -589,7 +589,7 @@ func TestFormatPost_empty(t *testing.T) {
 	item := FeedItem{
 		PostInfo: PostInfo{},
 	}
-	result := FormatPost(item)
+	result := FormatPost(item, -1)
 	if !strings.Contains(result, "(@)") {
 		t.Errorf("expected empty handle format in output, got: %s", result)
 	}
@@ -1129,5 +1129,56 @@ func TestGetPosts_error(t *testing.T) {
 	_, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
 	if err == nil {
 		t.Fatal("expected error for failed fetch")
+	}
+}
+
+func TestGetPosts_batching(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		query := r.URL.Query()
+		uris := query["uris"]
+		w.Header().Set("Content-Type", "application/json")
+		posts := make([]*bsky.FeedDefs_PostView, 0, len(uris))
+		for _, uri := range uris {
+			posts = append(posts, &bsky.FeedDefs_PostView{
+				Uri:       uri,
+				Cid:       "bafy-test",
+				IndexedAt: "2024-06-01T12:00:00Z",
+				Author: &bsky.ActorDefs_ProfileViewBasic{
+					Did:    "did:plc:test",
+					Handle: "test.bsky.social",
+				},
+				Record: &util.LexiconTypeDecoder{
+					Val: &bsky.FeedPost{
+						Text:      "Post " + uri,
+						CreatedAt: "2024-06-01T12:00:00Z",
+					},
+				},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
+			Posts: posts,
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	uris := make([]string, 30)
+	for i := range uris {
+		uris[i] = "at://uri/" + string(rune('A'+i))
+	}
+
+	items, err := GetPosts(context.Background(), client, uris)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 30 {
+		t.Errorf("expected 30 items, got %d", len(items))
+	}
+	if requestCount != 2 {
+		t.Errorf("expected 2 batch requests, got %d", requestCount)
 	}
 }

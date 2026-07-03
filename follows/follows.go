@@ -69,16 +69,32 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 	case "d":
 		if len(m.cfg.Follows) > 0 {
-			removed := m.cfg.Follows[m.cursor]
-			m.cfg.RemoveFollow(m.cursor)
+			handle := m.cfg.Follows[m.cursor]
+			if err := config.Update(func(cfg *config.Config) {
+				idx := -1
+				for i, h := range cfg.Follows {
+					if h == handle {
+						idx = i
+						break
+					}
+				}
+				if idx >= 0 {
+					cfg.RemoveFollow(idx)
+				}
+			}); err != nil {
+				m.statusMsg = fmt.Sprintf("Error removing follow: %v", err)
+				return m, nil
+			}
+			fresh, err := config.Load()
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("Error reloading config: %v", err)
+				return m, nil
+			}
+			m.cfg = fresh
 			if m.cursor >= len(m.cfg.Follows) && m.cursor > 0 {
 				m.cursor--
 			}
-			if err := m.cfg.Save(); err != nil {
-				m.statusMsg = fmt.Sprintf("Error saving: %v", err)
-			} else {
-				m.statusMsg = fmt.Sprintf("Removed @%s", removed)
-			}
+			m.statusMsg = fmt.Sprintf("Removed @%s", handle)
 		}
 	}
 	return m, nil
@@ -98,12 +114,19 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		handle = strings.TrimPrefix(handle, "@")
-		m.cfg.AddFollow(handle)
-		if err := m.cfg.Save(); err != nil {
-			m.statusMsg = fmt.Sprintf("Error saving: %v", err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Added @%s", handle)
+		if err := config.Update(func(cfg *config.Config) {
+			cfg.AddFollow(handle)
+		}); err != nil {
+			m.statusMsg = fmt.Sprintf("Error adding follow: %v", err)
+			return m, nil
 		}
+		fresh, err := config.Load()
+		if err != nil {
+			m.statusMsg = fmt.Sprintf("Error reloading config: %v", err)
+			return m, nil
+		}
+		m.cfg = fresh
+		m.statusMsg = fmt.Sprintf("Added @%s", handle)
 		m.mode = modeList
 		m.input = ""
 		m.cursor = len(m.cfg.Follows) - 1

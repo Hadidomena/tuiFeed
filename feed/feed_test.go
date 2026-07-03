@@ -663,14 +663,25 @@ func TestOpenAttachment_oob(t *testing.T) {
 	}
 }
 
+func setupFeedTestConfig(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	cfg := &config.Config{}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUpdate_sKey_save(t *testing.T) {
+	setupFeedTestConfig(t)
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg := &config.Config{}
+	cfg, _ := config.Load()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
@@ -678,20 +689,23 @@ func TestUpdate_sKey_save(t *testing.T) {
 	if m.statusMsg != "Saved!" {
 		t.Errorf("expected status 'Saved!', got %q", m.statusMsg)
 	}
-	if !cfg.IsSaved("at://uri/1") {
+	saved, _ := config.Load()
+	if !saved.IsSaved("at://uri/1") {
 		t.Error("expected URI to be saved")
 	}
 }
 
 func TestUpdate_sKey_unsave(t *testing.T) {
+	setupFeedTestConfig(t)
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg := &config.Config{}
+	cfg, _ := config.Load()
 	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
@@ -699,7 +713,8 @@ func TestUpdate_sKey_unsave(t *testing.T) {
 	if m.statusMsg != "Unsaved" {
 		t.Errorf("expected status 'Unsaved', got %q", m.statusMsg)
 	}
-	if cfg.IsSaved("at://uri/1") {
+	saved, _ := config.Load()
+	if saved.IsSaved("at://uri/1") {
 		t.Error("expected URI to be unsaved")
 	}
 }
@@ -734,14 +749,16 @@ func TestUpdate_sKey_noURI(t *testing.T) {
 }
 
 func TestUpdate_sKey_removeFromSaved(t *testing.T) {
+	setupFeedTestConfig(t)
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg := &config.Config{}
+	cfg, _ := config.Load()
 	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
@@ -753,20 +770,23 @@ func TestUpdate_sKey_removeFromSaved(t *testing.T) {
 	if len(m.posts) != 0 {
 		t.Errorf("expected 0 posts after removal, got %d", len(m.posts))
 	}
-	if cfg.IsSaved("at://uri/1") {
+	saved, _ := config.Load()
+	if saved.IsSaved("at://uri/1") {
 		t.Error("expected URI to be removed from saved")
 	}
 }
 
 func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
+	setupFeedTestConfig(t)
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg := &config.Config{}
+	cfg, _ := config.Load()
 	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true

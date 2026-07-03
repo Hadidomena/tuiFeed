@@ -186,6 +186,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "o":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
+				if !m.hasRendered {
+					m.hasRendered = true
+					m.imgCursor = 0
+				}
 				m.statusMsg = "Opening image externally..."
 				return m, m.openAttachment
 			}
@@ -199,7 +203,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isSavedView {
-				m.cfg.RemoveSavedPostByURI(uri)
+				if err := config.Update(func(cfg *config.Config) {
+					cfg.RemoveSavedPostByURI(uri)
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error removing saved post: %v", err)
+					return m, nil
+				}
 				m.posts = append(m.posts[:m.cursor], m.posts[m.cursor+1:]...)
 				if m.cursor >= len(m.posts) && m.cursor > 0 {
 					m.cursor--
@@ -213,22 +222,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.hasRendered = false
 				m.imageRows = 0
 				bsk.ClearImages()
-				_ = m.cfg.Save()
 				m.statusMsg = "Removed from saved"
 				if len(m.posts) == 0 {
 					m.statusMsg = "No saved posts"
 				}
+				fresh, err := config.Load()
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("Saved, but config reload failed: %v", err)
+					return m, nil
+				}
+				m.cfg = fresh
 				return m, nil
 			}
 			if m.cfg.IsSaved(uri) {
-				m.cfg.RemoveSavedPostByURI(uri)
-				_ = m.cfg.Save()
+				if err := config.Update(func(cfg *config.Config) {
+					cfg.RemoveSavedPostByURI(uri)
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error unsaving post: %v", err)
+					return m, nil
+				}
 				m.statusMsg = "Unsaved"
 			} else {
-				m.cfg.SavePost(uri)
-				_ = m.cfg.Save()
+				if err := config.Update(func(cfg *config.Config) {
+					cfg.SavePost(uri)
+				}); err != nil {
+					m.statusMsg = fmt.Sprintf("Error saving post: %v", err)
+					return m, nil
+				}
 				m.statusMsg = "Saved!"
 			}
+			fresh, err := config.Load()
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("Saved, but config reload failed: %v", err)
+				return m, nil
+			}
+			m.cfg = fresh
 		case "r":
 			if m.isSavedView {
 				return m, nil
@@ -257,6 +285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = string(msg)
 	case imageRenderedMsg:
 		m.imageRows = msg.imageRows
+		m.statusMsg = msg.status
 	}
 
 	return m, nil
@@ -268,7 +297,7 @@ func (m Model) renderAttachment() tea.Msg {
 		return loadErrorMsg("No image to render")
 	}
 
-	postText := bsk.FormatPost(post)
+	postText := bsk.FormatPost(post, m.imgCursor)
 	postLines := strings.Count(postText, "\n")
 	yOffset := 5 + postLines
 
@@ -379,7 +408,11 @@ func (m Model) View() tea.View {
 			idx = 0
 		}
 		b.WriteString(fmt.Sprintf("Post %d/%d\n\n", idx+1, len(m.posts)))
-		b.WriteString(bsk.FormatPost(m.posts[idx]))
+		cursor := -1
+		if m.hasRendered {
+			cursor = m.imgCursor
+		}
+		b.WriteString(bsk.FormatPost(m.posts[idx], cursor))
 	}
 
 	if m.hasRendered && m.imageRows > 0 {
@@ -391,7 +424,11 @@ func (m Model) View() tea.View {
 	}
 
 	if m.isSavedView {
-		b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
+			b.WriteString("\n[←/→] prev/next image  [s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		} else {
+			b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		}
 	} else if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
 		b.WriteString("\n[←/→] prev/next image  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
 	} else {

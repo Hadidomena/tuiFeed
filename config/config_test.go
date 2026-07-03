@@ -206,28 +206,6 @@ func TestSavePost_duplicate(t *testing.T) {
 	}
 }
 
-func TestRemoveSavedPost(t *testing.T) {
-	cfg := &Config{SavedPosts: []string{"a", "b", "c"}}
-	cfg.RemoveSavedPost(1)
-
-	if len(cfg.SavedPosts) != 2 {
-		t.Fatalf("expected 2 saved posts, got %d", len(cfg.SavedPosts))
-	}
-	if cfg.SavedPosts[0] != "a" || cfg.SavedPosts[1] != "c" {
-		t.Errorf("unexpected saved posts: %v", cfg.SavedPosts)
-	}
-}
-
-func TestRemoveSavedPost_outOfBounds(t *testing.T) {
-	cfg := &Config{SavedPosts: []string{"a"}}
-	cfg.RemoveSavedPost(-1)
-	cfg.RemoveSavedPost(5)
-
-	if len(cfg.SavedPosts) != 1 {
-		t.Fatalf("expected 1 saved post, got %d", len(cfg.SavedPosts))
-	}
-}
-
 func TestRemoveSavedPostByURI(t *testing.T) {
 	cfg := &Config{SavedPosts: []string{"uri:a", "uri:b", "uri:c"}}
 	cfg.RemoveSavedPostByURI("uri:b")

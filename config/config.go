@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"sync"
 	"time"
 )
+
+var updateMu sync.Mutex
 
 type Config struct {
 	Follows    []string          `json:"follows"`
@@ -60,7 +64,40 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(p), "tuiFeed-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, p); err != nil {
+		if runtime.GOOS == "windows" {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return os.Rename(tmpName, p)
+		}
+		return err
+	}
+	return nil
+}
+
+func Update(fn func(*Config)) error {
+	updateMu.Lock()
+	defer updateMu.Unlock()
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	fn(cfg)
+	return cfg.Save()
 }
 
 func (c *Config) AddFollow(handle string) {
@@ -86,13 +123,6 @@ func (c *Config) SavePost(uri string) {
 		return
 	}
 	c.SavedPosts = append(c.SavedPosts, uri)
-}
-
-func (c *Config) RemoveSavedPost(index int) {
-	if index < 0 || index >= len(c.SavedPosts) {
-		return
-	}
-	c.SavedPosts = append(c.SavedPosts[:index], c.SavedPosts[index+1:]...)
 }
 
 func (c *Config) RemoveSavedPostByURI(uri string) {

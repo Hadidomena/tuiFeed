@@ -139,7 +139,7 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func FormatPost(item FeedItem) string {
+func FormatPost(item FeedItem, imgCursor int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
 	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
@@ -149,8 +149,12 @@ func FormatPost(item FeedItem) string {
 
 	if len(item.Embeds) > 0 {
 		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
-		for _, embed := range item.Embeds {
-			b.WriteString(fmt.Sprintf("  %s\n", embed))
+		for i, embed := range item.Embeds {
+			marker := "  "
+			if i == imgCursor {
+				marker = "> "
+			}
+			b.WriteString(fmt.Sprintf("%s%s\n", marker, embed))
 		}
 	}
 
@@ -210,17 +214,25 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 }
 
 func GetPosts(ctx context.Context, client *xrpc.Client, uris []string) ([]FeedItem, error) {
-	out, err := bsky.FeedGetPosts(ctx, client, uris)
-	if err != nil {
-		return nil, fmt.Errorf("fetching posts: %w", err)
-	}
-	posts := make([]FeedItem, 0, len(out.Posts))
-	for _, p := range out.Posts {
-		if p != nil {
-			posts = append(posts, FeedItem{
-				PostInfo: ExtractPostInfo(p),
-				URI:      p.Uri,
-			})
+	const batchSize = 25
+	posts := make([]FeedItem, 0, len(uris))
+	for i := 0; i < len(uris); i += batchSize {
+		end := i + batchSize
+		if end > len(uris) {
+			end = len(uris)
+		}
+		chunk := uris[i:end]
+		out, err := bsky.FeedGetPosts(ctx, client, chunk)
+		if err != nil {
+			return nil, fmt.Errorf("fetching posts: %w", err)
+		}
+		for _, p := range out.Posts {
+			if p != nil {
+				posts = append(posts, FeedItem{
+					PostInfo: ExtractPostInfo(p),
+					URI:      p.Uri,
+				})
+			}
 		}
 	}
 	return posts, nil

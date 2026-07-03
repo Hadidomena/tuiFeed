@@ -358,8 +358,8 @@ func TestUpdateList_dSaveError(t *testing.T) {
 	}
 
 	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'd'})
-	if len(m.cfg.Follows) != 1 {
-		t.Fatalf("expected 1 follow, got %d", len(m.cfg.Follows))
+	if len(m.cfg.Follows) != 2 {
+		t.Fatalf("expected 2 follows (save failed, state unchanged), got %d", len(m.cfg.Follows))
 	}
 }
 
