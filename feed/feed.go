@@ -227,9 +227,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "No saved posts"
 				}
 				fresh, err := config.Load()
-				if err == nil {
-					m.cfg = fresh
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("Saved, but config reload failed: %v", err)
+					return m, nil
 				}
+				m.cfg = fresh
 				return m, nil
 			}
 			if m.cfg.IsSaved(uri) {
@@ -250,9 +252,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "Saved!"
 			}
 			fresh, err := config.Load()
-			if err == nil {
-				m.cfg = fresh
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("Saved, but config reload failed: %v", err)
+				return m, nil
 			}
+			m.cfg = fresh
 		case "r":
 			if m.isSavedView {
 				return m, nil
