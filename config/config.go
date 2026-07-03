@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"sync"
 	"time"
 )
+
+var updateMu sync.Mutex
 
 type Config struct {
 	Follows    []string          `json:"follows"`
@@ -73,10 +77,21 @@ func (c *Config) Save() error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, p)
+	if err := os.Rename(tmpName, p); err != nil {
+		if runtime.GOOS == "windows" {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return os.Rename(tmpName, p)
+		}
+		return err
+	}
+	return nil
 }
 
 func Update(fn func(*Config)) error {
+	updateMu.Lock()
+	defer updateMu.Unlock()
 	cfg, err := Load()
 	if err != nil {
 		return err
