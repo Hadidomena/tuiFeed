@@ -68,6 +68,7 @@ func BuildThreadTree(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
 		if reply.FeedDefs_ThreadViewPost != nil {
 			child := BuildThreadTree(reply.FeedDefs_ThreadViewPost)
 			if child != nil {
+				child.Parent = node
 				node.Replies = append(node.Replies, child)
 			}
 		}
