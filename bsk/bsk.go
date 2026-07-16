@@ -29,6 +29,53 @@ type Thread struct {
 	Replies []PostInfo
 }
 
+type ThreadNode struct {
+	Post    PostInfo
+	URI     string
+	Parent  *ThreadNode
+	Replies []*ThreadNode
+}
+
+func GetThreadByURI(ctx context.Context, client *xrpc.Client, atURI string) (*ThreadNode, error) {
+	threadOutput, err := bsky.FeedGetPostThread(ctx, client, 0, 0, atURI)
+	if err != nil {
+		return nil, fmt.Errorf("post not found: %w", err)
+	}
+	if threadOutput.Thread.FeedDefs_ThreadViewPost == nil {
+		return nil, fmt.Errorf("failed to read post details")
+	}
+	return BuildThreadTree(threadOutput.Thread.FeedDefs_ThreadViewPost), nil
+}
+
+func BuildThreadTree(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
+	if threadView == nil || threadView.Post == nil {
+		return nil
+	}
+
+	node := &ThreadNode{
+		Post: ExtractPostInfo(threadView.Post),
+		URI:  threadView.Post.Uri,
+	}
+
+	if threadView.Parent != nil && threadView.Parent.FeedDefs_ThreadViewPost != nil {
+		parentNode := BuildThreadTree(threadView.Parent.FeedDefs_ThreadViewPost)
+		if parentNode != nil {
+			node.Parent = parentNode
+		}
+	}
+
+	for _, reply := range threadView.Replies {
+		if reply.FeedDefs_ThreadViewPost != nil {
+			child := BuildThreadTree(reply.FeedDefs_ThreadViewPost)
+			if child != nil {
+				node.Replies = append(node.Replies, child)
+			}
+		}
+	}
+
+	return node
+}
+
 func NewClient() *xrpc.Client {
 	return &xrpc.Client{
 		Host: "https://public.api.bsky.app",
