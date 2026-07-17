@@ -17,6 +17,10 @@ import (
 
 type BackMsg struct{}
 
+type OpenThreadMsg struct {
+	URI string
+}
+
 type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
