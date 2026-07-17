@@ -1,11 +1,14 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/feed"
+	"github.com/Hadidomena/tuiFeed/thread"
 )
 
 func updateDashboard(m DashboardModel, msg tea.Msg) DashboardModel {
@@ -287,5 +290,72 @@ func TestUpdateSubModel(t *testing.T) {
 	_, cmd := updateSubModel(d, tea.KeyPressMsg{Code: 'q'})
 	if cmd == nil {
 		t.Fatal("expected command from updateSubModel")
+	}
+}
+
+func updateMainModel(m MainModel, msg tea.Msg) MainModel {
+	r, _ := m.Update(msg)
+	return r.(MainModel)
+}
+
+func TestMainModel_OpenThreadMsg_transitions(t *testing.T) {
+	m := NewMainModel()
+	result, cmd := m.Update(feed.OpenThreadMsg{URI: "at://test/uri"})
+	mm := result.(MainModel)
+
+	if mm.state != showThreadView {
+		t.Errorf("expected showThreadView, got %d", mm.state)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil command from thread.Init()")
+	}
+}
+
+func TestMainModel_OpenThreadMsg_showsLoadingView(t *testing.T) {
+	m := NewMainModel()
+	result, _ := m.Update(feed.OpenThreadMsg{URI: "at://test/uri"})
+	mm := result.(MainModel)
+
+	v := mm.View()
+	if !strings.Contains(v.Content, "Loading comments") {
+		t.Errorf("expected thread loading view, got: %s", v.Content)
+	}
+}
+
+func TestMainModel_ThreadBackMsg_returnsToFeed(t *testing.T) {
+	m := NewMainModel()
+	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+
+	mm = updateMainModel(mm, thread.BackMsg{})
+	if mm.state != showFeedView {
+		t.Errorf("expected showFeedView after back, got %d", mm.state)
+	}
+}
+
+func TestMainModel_OpenThreadMsg_viewDispatch(t *testing.T) {
+	m := NewMainModel()
+	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+
+	v := mm.View()
+	if !strings.Contains(v.Content, "Comments") && !strings.Contains(v.Content, "Loading comments") {
+		t.Errorf("expected thread-related view content, got: %s", v.Content)
+	}
+}
+
+func TestMainModel_OpenThreadMsg_fromDifferentStates(t *testing.T) {
+	m := NewMainModel()
+	// Try from dashboard (initial state)
+	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+	if mm.state != showThreadView {
+		t.Errorf("expected showThreadView from dashboard, got %d", mm.state)
+	}
+
+	// Go back
+	mm = updateMainModel(mm, thread.BackMsg{})
+
+	// Try from feed state
+	mm = updateMainModel(mm, feed.OpenThreadMsg{URI: "at://test/uri2"})
+	if mm.state != showThreadView {
+		t.Errorf("expected showThreadView from feed, got %d", mm.state)
 	}
 }
