@@ -677,6 +677,70 @@ func TestView_moreAboveBelow(t *testing.T) {
 	}
 }
 
+func TestView_breadcrumbTruncated(t *testing.T) {
+	longBc := []string{"@a", "@b", "@c", "@d", "@e", "@f", "@g", "@h"}
+	root := makeNode("a", "Root", "at://uri/a")
+	m := Model{
+		root:       root,
+		current:    root,
+		breadcrumb: longBc,
+	}
+	v := m.View()
+	if !strings.Contains(v.Content, "... > @d > @e > @f > @g > @h") {
+		t.Errorf("expected truncated breadcrumb, got: %s", v.Content)
+	}
+}
+
+func TestView_breadcrumbNotTruncated(t *testing.T) {
+	shortBc := []string{"@a", "@b", "@c"}
+	root := makeNode("a", "Root", "at://uri/a")
+	m := Model{
+		root:       root,
+		current:    root,
+		breadcrumb: shortBc,
+	}
+	v := m.View()
+	if strings.Contains(v.Content, "... >") {
+		t.Errorf("expected no truncation for short breadcrumb, got: %s", v.Content)
+	}
+}
+
+func TestView_breadcrumbAtLimit(t *testing.T) {
+	limitBc := []string{"@a", "@b", "@c", "@d", "@e"}
+	root := makeNode("a", "Root", "at://uri/a")
+	m := Model{
+		root:       root,
+		current:    root,
+		breadcrumb: limitBc,
+	}
+	v := m.View()
+	if strings.Contains(v.Content, "... >") {
+		t.Errorf("expected no truncation at exactly maxBreadcrumb, got: %s", v.Content)
+	}
+}
+
+func TestView_noRepliesMessage(t *testing.T) {
+	root := makeNode("author", "Root", "at://uri/root")
+	m := Model{
+		root:       root,
+		current:    root,
+		replies:    nil,
+		breadcrumb: []string{"@author"},
+	}
+	v := m.View()
+	if !strings.Contains(v.Content, "No replies yet") {
+		t.Errorf("expected 'No replies yet', got: %s", v.Content)
+	}
+}
+
+func TestView_emptyThreadData(t *testing.T) {
+	m := Model{loading: false, root: nil}
+	v := m.View()
+	if !strings.Contains(v.Content, "No thread data") {
+		t.Errorf("expected 'No thread data', got: %s", v.Content)
+	}
+}
+
 func TestView_downKeyNoOpAtBottom(t *testing.T) {
 	reply := makeNode("r1", "Reply", "at://uri/r1")
 	root := makeNode("author", "Root", "at://uri/root", reply)
