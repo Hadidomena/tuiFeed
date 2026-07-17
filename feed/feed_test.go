@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -794,6 +795,68 @@ func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
 
 	if m.statusMsg != "No saved posts" {
 		t.Errorf("expected 'No saved posts' after removing last, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_cKey_sendsOpenThreadMsg(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd == nil {
+		t.Fatal("expected command for c key")
+	}
+	msg := cmd()
+	ot, ok := msg.(OpenThreadMsg)
+	if !ok {
+		t.Fatalf("expected OpenThreadMsg, got %T", msg)
+	}
+	if ot.URI != "at://uri/1" {
+		t.Errorf("expected URI 'at://uri/1', got %q", ot.URI)
+	}
+}
+
+func TestUpdate_cKey_emptyPosts(t *testing.T) {
+	m := NewStaticModel(nil, "Test")
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd != nil {
+		t.Error("expected no command when no posts")
+	}
+}
+
+func TestUpdate_cKey_noURI(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"}},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd != nil {
+		t.Error("expected no command when post has no URI")
+	}
+}
+
+func TestView_helpBarShowsComments(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Feed")
+	m.loading = false
+	m.cursor = 0
+	v := m.View()
+	if !strings.Contains(v.Content, "[c] comments") {
+		t.Errorf("expected '[c] comments' in help bar, got: %s", v.Content)
 	}
 }
 
