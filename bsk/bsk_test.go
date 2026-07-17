@@ -1550,3 +1550,121 @@ func TestGetPosts_batching(t *testing.T) {
 		t.Errorf("expected 2 batch requests, got %d", requestCount)
 	}
 }
+
+func TestFormatPostListItem_basic(t *testing.T) {
+	post := PostInfo{
+		AuthorDisplayName: "Test User",
+		AuthorHandle:      "test.bsky.social",
+		Text:              "Hello world",
+		LikeCount:         42,
+		ReplyCount:        7,
+		IndexedAt:         "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, true)
+	if !strings.Contains(result, "> @test.bsky.social") {
+		t.Errorf("expected cursor and handle, got: %s", result)
+	}
+	if !strings.Contains(result, "Hello world") {
+		t.Errorf("expected text in output, got: %s", result)
+	}
+	result = FormatPostListItem(post, false)
+	if strings.Contains(result, "> @") {
+		t.Errorf("expected no cursor when cursor=false, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_truncation(t *testing.T) {
+	longText := ""
+	for i := 0; i < 200; i++ {
+		longText += "a"
+	}
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         longText,
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "...") {
+		t.Errorf("expected truncated text, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_newlinesReplaced(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "line1\nline2\nline3",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if strings.Contains(result, "\n") && !strings.HasSuffix(result, "\n") {
+		t.Error("expected newlines in text to be replaced with spaces")
+	}
+}
+
+func TestFormatPostListItem_embeds(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		Embeds:       []string{"https://example.com/img.jpg"},
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "1 attachment") {
+		t.Errorf("expected attachment indicator, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_emptyDisplayName(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "(test.bsky.social)") {
+		t.Errorf("expected handle as fallback display name, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_shortDate(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		CreatedAt:    "2024-01",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "📅 2024-01") {
+		t.Errorf("expected short date, got: %s", result)
+	}
+}
+
+func TestWriteMoreIndicators(t *testing.T) {
+	var b strings.Builder
+	WriteMoreIndicators(&b, 5, 15, 25)
+	if !strings.Contains(b.String(), "more above") {
+		t.Errorf("expected 'more above' when scrollPos > 0, got: %s", b.String())
+	}
+	if !strings.Contains(b.String(), "more below") {
+		t.Errorf("expected 'more below' when end < total, got: %s", b.String())
+	}
+}
+
+func TestWriteMoreIndicators_noIndicators(t *testing.T) {
+	var b strings.Builder
+	WriteMoreIndicators(&b, 0, 10, 10)
+	if b.Len() > 0 {
+		t.Errorf("expected empty output when at boundaries, got: %s", b.String())
+	}
+}
+
+func TestFormatPostListItem_zeroCounts(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "❤️ 0") {
+		t.Errorf("expected zero like count, got: %s", result)
+	}
+}

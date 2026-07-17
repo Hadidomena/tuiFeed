@@ -294,6 +294,53 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 	return posts, nextCursor, nil
 }
 
+func FormatPostListItem(post PostInfo, cursor bool) string {
+	var b strings.Builder
+
+	cursorStr := "  "
+	if cursor {
+		cursorStr = "> "
+	}
+
+	createdAt := post.IndexedAt
+	if createdAt == "" {
+		createdAt = post.CreatedAt
+	}
+	if len(createdAt) > 10 {
+		createdAt = createdAt[:10]
+	}
+
+	author := post.AuthorDisplayName
+	if author == "" {
+		author = post.AuthorHandle
+	}
+
+	b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
+		cursorStr, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
+
+	text := strings.TrimSpace(post.Text)
+	if len(text) > 120 {
+		text = text[:120] + "..."
+	}
+	text = strings.ReplaceAll(text, "\n", " ")
+	b.WriteString(fmt.Sprintf("    %s\n", text))
+
+	if len(post.Embeds) > 0 {
+		b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
+	}
+
+	return b.String()
+}
+
+func WriteMoreIndicators(b *strings.Builder, scrollPos, end, total int) {
+	if scrollPos > 0 {
+		b.WriteString(fmt.Sprintf("  ... %d more above\n", scrollPos))
+	}
+	if end < total {
+		b.WriteString(fmt.Sprintf("  ... %d more below\n", total-end))
+	}
+}
+
 func GetPosts(ctx context.Context, client *xrpc.Client, uris []string) ([]FeedItem, error) {
 	const batchSize = 25
 	posts := make([]FeedItem, 0, len(uris))
