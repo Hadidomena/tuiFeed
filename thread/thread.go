@@ -104,6 +104,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Error loading thread: %v", msg.err)
+		} else if msg.root == nil {
+			m.statusMsg = "Error: empty thread data received"
 		} else {
 			m.root = msg.root
 			m.current = msg.root
