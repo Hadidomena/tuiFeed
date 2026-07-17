@@ -245,6 +245,24 @@ func TestUpdate_threadLoadedError(t *testing.T) {
 	}
 }
 
+func TestUpdate_threadLoadedNilRoot(t *testing.T) {
+	result, cmd := Model{loading: true}.Update(threadLoadedMsg{root: nil})
+	m := result.(Model)
+
+	if m.loading {
+		t.Error("expected loading to be false")
+	}
+	if m.root != nil {
+		t.Error("expected root to stay nil")
+	}
+	if !strings.Contains(m.statusMsg, "empty thread data") {
+		t.Errorf("expected status about empty data, got %q", m.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("expected nil command")
+	}
+}
+
 func TestUpdate_quitKeys(t *testing.T) {
 	m := Model{loading: true}
 	for _, key := range []tea.KeyPressMsg{
