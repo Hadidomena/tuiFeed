@@ -39,10 +39,13 @@ type ThreadNode struct {
 func GetThreadByURI(ctx context.Context, client *xrpc.Client, atURI string) (*ThreadNode, error) {
 	threadOutput, err := bsky.FeedGetPostThread(ctx, client, 0, 0, atURI)
 	if err != nil {
-		return nil, fmt.Errorf("post not found: %w", err)
+		return nil, fmt.Errorf("fetching thread: %w", err)
+	}
+	if threadOutput == nil || threadOutput.Thread == nil {
+		return nil, fmt.Errorf("empty response from server")
 	}
 	if threadOutput.Thread.FeedDefs_ThreadViewPost == nil {
-		return nil, fmt.Errorf("failed to read post details")
+		return nil, fmt.Errorf("post not found or not accessible")
 	}
 	return BuildThreadTree(threadOutput.Thread.FeedDefs_ThreadViewPost), nil
 }
