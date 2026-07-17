@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 )
 
@@ -18,16 +19,19 @@ type threadLoadedMsg struct {
 }
 
 type Model struct {
-	root       *bsk.ThreadNode
-	current    *bsk.ThreadNode
-	replies    []*bsk.ThreadNode
-	cursor     int
-	scrollPos  int
-	pageSize   int
-	breadcrumb []string
-	loading    bool
-	statusMsg  string
-	uri        string
+	root        *bsk.ThreadNode
+	current     *bsk.ThreadNode
+	replies     []*bsk.ThreadNode
+	cursor      int
+	scrollPos   int
+	pageSize    int
+	breadcrumb  []string
+	loading     bool
+	statusMsg   string
+	uri         string
+	imgCursor   int
+	hasRendered bool
+	imageRows   int
 }
 
 func NewModel(uri string) Model {
@@ -60,8 +64,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
+			bsk.ClearImages()
 			return m, tea.Quit
 		case "esc":
+			m.hasRendered = false
+			m.imageRows = 0
+			bsk.ClearImages()
 			if m.loading {
 				return m, nil
 			}
@@ -72,6 +80,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor >= m.scrollPos+m.pageSize {
 					m.scrollPos++
 				}
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "up", "k":
 			if !m.loading && m.cursor > 0 {
@@ -79,6 +92,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < m.scrollPos {
 					m.scrollPos--
 				}
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "h", "backspace":
 			if !m.loading && m.current != m.root {
@@ -87,6 +105,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.breadcrumb = m.breadcrumb[:len(m.breadcrumb)-1]
 				m.cursor = 0
 				m.scrollPos = 0
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
 			}
 		case "enter":
 			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) {
@@ -97,7 +120,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.breadcrumb = append(m.breadcrumb, "@"+reply.Post.AuthorHandle)
 					m.cursor = 0
 					m.scrollPos = 0
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
 				}
+			}
+		case "left":
+			if !m.loading && m.hasRendered && m.imgCursor > 0 && len(m.replies) > 0 && m.cursor < len(m.replies) {
+				m.imgCursor--
+				return m, m.renderAttachment
+			}
+		case "right", "l":
+			if !m.loading && m.hasRendered && len(m.replies) > 0 && m.cursor < len(m.replies) && m.imgCursor < len(m.replies[m.cursor].Post.Embeds)-1 {
+				m.imgCursor++
+				return m, m.renderAttachment
+			}
+		case "a":
+			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				m.imgCursor = 0
+				m.hasRendered = true
+				return m, m.renderAttachment
+			}
+		case "o":
+			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				if !m.hasRendered {
+					m.hasRendered = true
+					m.imgCursor = 0
+				}
+				m.statusMsg = "Opening image externally..."
+				return m, m.openAttachment
 			}
 		}
 	case threadLoadedMsg:
@@ -112,9 +165,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.replies = msg.root.Replies
 			m.breadcrumb = []string{"@" + msg.root.Post.AuthorHandle}
 		}
+	case attach.RenderedMsg:
+		m.imageRows = msg.ImageRows
+		m.statusMsg = msg.Status
+	case attach.ErrorMsg:
+		m.statusMsg = string(msg)
 	}
 
 	return m, nil
+}
+
+func (m Model) renderAttachment() tea.Msg {
+	reply := m.replies[m.cursor]
+	postText := bsk.FormatPost(bsk.FeedItem{PostInfo: reply.Post, URI: reply.URI}, m.imgCursor)
+	postLines := strings.Count(postText, "\n")
+	yOffset := 6 + postLines
+	return attach.Render(reply.Post.Embeds, m.imgCursor, yOffset)
+}
+
+func (m Model) openAttachment() tea.Msg {
+	reply := m.replies[m.cursor]
+	return attach.Open(reply.Post.Embeds, m.imgCursor)
 }
 
 func (m Model) View() tea.View {
@@ -221,16 +292,31 @@ func (m Model) View() tea.View {
 		b.WriteString(fmt.Sprintf("Reply %d/%d\n\n", idx+1, len(m.replies)))
 
 		selected := m.replies[idx]
-		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, -1))
+		cursor := -1
+		if m.hasRendered {
+			cursor = m.imgCursor
+		}
+		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor))
+	}
+
+	if m.imageRows > 0 {
+		b.WriteString(strings.Repeat("\n", m.imageRows))
 	}
 
 	if m.statusMsg != "" {
 		b.WriteString(fmt.Sprintf("%s\n", m.statusMsg))
 	}
 
+	hasEmbeds := len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0
 	help := "\n[j/k] navigate  [enter] drill"
 	if m.current != m.root {
 		help += "  [h] parent"
+	}
+	if hasEmbeds {
+		if m.hasRendered && len(m.replies[m.cursor].Post.Embeds) > 1 {
+			help += "  [←/→] images"
+		}
+		help += "  [a] attachments  [o] open"
 	}
 	help += "  [esc] back  [q] quit\n"
 	b.WriteString(help)

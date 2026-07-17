@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 )
 
@@ -315,8 +316,7 @@ func TestUpdate_jkNavigation(t *testing.T) {
 	}
 
 	r, _ := m.Update(keyRune('j'))
-	m = r.(Model)
-	if m.cursor != 1 {
+	if r.(Model).cursor != 1 {
 		t.Errorf("expected cursor 1 after j, got %d", m.cursor)
 	}
 
@@ -738,6 +738,215 @@ func TestView_emptyThreadData(t *testing.T) {
 	v := m.View()
 	if !strings.Contains(v.Content, "No thread data") {
 		t.Errorf("expected 'No thread data', got: %s", v.Content)
+	}
+}
+
+func TestUpdate_aKey_rendersAttachment(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	if cmd == nil {
+		t.Fatal("expected command for a key with embeds")
+	}
+}
+
+func TestUpdate_aKey_noEmbeds(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	if cmd != nil {
+		t.Error("expected no command for a key without embeds")
+	}
+}
+
+func TestUpdate_aKey_noReplies(t *testing.T) {
+	root := makeNode("author", "Root", "at://uri/root")
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	if cmd != nil {
+		t.Error("expected no command for a key with no replies")
+	}
+}
+
+func TestUpdate_oKey_opensAttachment(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	r, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	m = r.(Model)
+	if cmd == nil {
+		t.Fatal("expected command for o key with embeds")
+	}
+	if m.statusMsg != "Opening image externally..." {
+		t.Errorf("expected status message, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_oKey_noEmbeds(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	if cmd != nil {
+		t.Error("expected no command for o key without embeds")
+	}
+}
+
+func TestUpdate_leftRight_imageNavigation(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	reply.Post.Embeds = []string{"a.jpg", "b.jpg"}
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:        root,
+		current:     root,
+		replies:     root.Replies,
+		pageSize:    10,
+		hasRendered: true,
+		imgCursor:   1,
+	}
+	r, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m = r.(Model)
+	if cmd == nil {
+		t.Fatal("expected command for left arrow")
+	}
+	if m.imgCursor != 0 {
+		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
+	}
+
+	r, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	m = r.(Model)
+	if cmd == nil {
+		t.Fatal("expected command for right arrow")
+	}
+	if m.imgCursor != 1 {
+		t.Errorf("expected imgCursor 1, got %d", m.imgCursor)
+	}
+}
+
+func TestUpdate_leftNoOpAtFirstImage(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	reply.Post.Embeds = []string{"a.jpg", "b.jpg"}
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:        root,
+		current:     root,
+		replies:     root.Replies,
+		pageSize:    10,
+		hasRendered: true,
+		imgCursor:   0,
+	}
+	r, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m = r.(Model)
+	if m.imgCursor != 0 {
+		t.Errorf("expected imgCursor to stay 0, got %d", m.imgCursor)
+	}
+}
+
+func TestUpdate_imageRenderedMsg(t *testing.T) {
+	m := Model{}
+	r, _ := m.Update(attach.RenderedMsg{ImageRows: 15, Status: "rendered"})
+	m = r.(Model)
+	if m.imageRows != 15 {
+		t.Errorf("expected imageRows 15, got %d", m.imageRows)
+	}
+	if m.statusMsg != "rendered" {
+		t.Errorf("expected status 'rendered', got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_renderErrorMsg(t *testing.T) {
+	m := Model{}
+	r, _ := m.Update(attach.ErrorMsg("something went wrong"))
+	m = r.(Model)
+	if m.statusMsg != "something went wrong" {
+		t.Errorf("expected status, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_jkResetsImageState(t *testing.T) {
+	reply1 := makeNode("r1", "R1", "at://uri/r1")
+	reply2 := makeNode("r2", "R2", "at://uri/r2")
+	root := makeNode("author", "Root", "at://uri/root", reply1, reply2)
+	m := Model{
+		root:        root,
+		current:     root,
+		replies:     root.Replies,
+		pageSize:    10,
+		hasRendered: true,
+		imageRows:   10,
+		imgCursor:   2,
+		statusMsg:   "some status",
+	}
+	r, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = r.(Model)
+	if m.hasRendered {
+		t.Error("expected hasRendered to be reset after j")
+	}
+	if m.imageRows != 0 {
+		t.Errorf("expected imageRows 0, got %d", m.imageRows)
+	}
+	if m.statusMsg != "" {
+		t.Errorf("expected empty statusMsg, got %q", m.statusMsg)
+	}
+}
+
+func TestView_helpBarShowsAttachmentKeys(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	v := m.View()
+	if !strings.Contains(v.Content, "[a] attachments") {
+		t.Errorf("expected '[a] attachments' in help, got: %s", v.Content)
+	}
+}
+
+func TestView_helpBarNoAttachmentKeysWithoutEmbeds(t *testing.T) {
+	reply := makeNode("replier", "Reply", "at://uri/reply")
+	root := makeNode("author", "Root", "at://uri/root", reply)
+	m := Model{
+		root:     root,
+		current:  root,
+		replies:  root.Replies,
+		pageSize: 10,
+	}
+	v := m.View()
+	if strings.Contains(v.Content, "[a] attachments") {
+		t.Errorf("expected no attachment keys without embeds, got: %s", v.Content)
 	}
 }
 
