@@ -645,6 +645,40 @@ func TestGetThreadByURI_nilThread(t *testing.T) {
 	}
 }
 
+func TestGetThreadByURI_nilOutputThread(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: nil,
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil Thread")
+	}
+}
+
+func TestGetThreadByURI_nilOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("null"))
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil output")
+	}
+}
+
 func TestGetPostThread_invalidURL(t *testing.T) {
 	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
 	if err == nil {
