@@ -679,6 +679,28 @@ func TestGetThreadByURI_nilOutput(t *testing.T) {
 	}
 }
 
+func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: &bsky.FeedGetPostThread_Output_Thread{
+				FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+					Post: nil,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil Post in ThreadViewPost")
+	}
+}
+
 func TestGetPostThread_invalidURL(t *testing.T) {
 	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
 	if err == nil {
