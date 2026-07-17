@@ -340,47 +340,11 @@ func (m Model) View() tea.View {
 		}
 
 		for i := m.scrollPos; i < end; i++ {
-			post := m.posts[i]
-			cursor := "  "
-			if m.cursor == i {
-				cursor = "> "
-			}
-
-			createdAt := post.IndexedAt
-			if createdAt == "" {
-				createdAt = post.CreatedAt
-			}
-			if len(createdAt) > 10 {
-				createdAt = createdAt[:10]
-			}
-
-			author := post.AuthorDisplayName
-			if author == "" {
-				author = post.AuthorHandle
-			}
-
-			b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
-				cursor, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
-
-			text := strings.TrimSpace(post.Text)
-			if len(text) > 120 {
-				text = text[:120] + "..."
-			}
-			text = strings.ReplaceAll(text, "\n", " ")
-			b.WriteString(fmt.Sprintf("    %s\n", text))
-
-			if len(post.Embeds) > 0 {
-				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
-			}
+			b.WriteString(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i))
 			b.WriteString("\n")
 		}
 
-		if m.scrollPos > 0 {
-			b.WriteString(fmt.Sprintf("  ... %d more above\n", m.scrollPos))
-		}
-		if end < len(m.posts) {
-			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.posts)-end))
-		}
+		bsk.WriteMoreIndicators(&b, m.scrollPos, end, len(m.posts))
 		idx := m.cursor
 		if idx >= len(m.posts) {
 			idx = 0

@@ -238,37 +238,7 @@ func (m Model) View() tea.View {
 
 		for i := m.scrollPos; i < end; i++ {
 			reply := m.replies[i]
-			cursor := "  "
-			if m.cursor == i {
-				cursor = "> "
-			}
-
-			createdAt := reply.Post.IndexedAt
-			if createdAt == "" {
-				createdAt = reply.Post.CreatedAt
-			}
-			if len(createdAt) > 10 {
-				createdAt = createdAt[:10]
-			}
-
-			author := reply.Post.AuthorDisplayName
-			if author == "" {
-				author = reply.Post.AuthorHandle
-			}
-
-			b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
-				cursor, reply.Post.AuthorHandle, author, reply.Post.LikeCount, reply.Post.ReplyCount, createdAt))
-
-			text := strings.TrimSpace(reply.Post.Text)
-			if len(text) > 120 {
-				text = text[:120] + "..."
-			}
-			text = strings.ReplaceAll(text, "\n", " ")
-			b.WriteString(fmt.Sprintf("    %s\n", text))
-
-			if len(reply.Post.Embeds) > 0 {
-				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(reply.Post.Embeds)))
-			}
+			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i))
 			if len(reply.Replies) > 0 {
 				nestedLabel := "ies"
 				if len(reply.Replies) == 1 {
@@ -279,12 +249,7 @@ func (m Model) View() tea.View {
 			b.WriteString("\n")
 		}
 
-		if m.scrollPos > 0 {
-			b.WriteString(fmt.Sprintf("  ... %d more above\n", m.scrollPos))
-		}
-		if end < len(m.replies) {
-			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.replies)-end))
-		}
+		bsk.WriteMoreIndicators(&b, m.scrollPos, end, len(m.replies))
 		idx := m.cursor
 		if idx >= len(m.replies) {
 			idx = 0
