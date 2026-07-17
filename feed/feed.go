@@ -261,6 +261,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.cfg = fresh
+		case "c":
+			if len(m.posts) > 0 && m.cursor < len(m.posts) {
+				uri := m.posts[m.cursor].URI
+				if uri != "" {
+					return m, func() tea.Msg {
+						return OpenThreadMsg{URI: uri}
+					}
+				}
+			}
 		case "r":
 			if m.isSavedView {
 				return m, nil
@@ -434,9 +443,9 @@ func (m Model) View() tea.View {
 			b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
 		}
 	} else if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
-		b.WriteString("\n[←/→] prev/next image  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[←/→] prev/next image  [c] comments  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
 	} else {
-		b.WriteString("\n[s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[c] comments  [s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
 	return tea.NewView(b.String())
 }
