@@ -47,7 +47,11 @@ func GetThreadByURI(ctx context.Context, client *xrpc.Client, atURI string) (*Th
 	if threadOutput.Thread.FeedDefs_ThreadViewPost == nil {
 		return nil, fmt.Errorf("post not found or not accessible")
 	}
-	return BuildThreadTree(threadOutput.Thread.FeedDefs_ThreadViewPost), nil
+	root := BuildThreadTree(threadOutput.Thread.FeedDefs_ThreadViewPost)
+	if root == nil {
+		return nil, fmt.Errorf("failed to parse thread (post is nil)")
+	}
+	return root, nil
 }
 
 func BuildThreadTree(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
