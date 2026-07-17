@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/bluesky-social/indigo/xrpc"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
 	indigobsky "github.com/bluesky-social/indigo/api/bsky"
@@ -342,7 +343,7 @@ func TestUpdate_loadErrorMsg(t *testing.T) {
 
 func TestUpdate_imageRenderedMsg(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
-	m, _ = update(m, imageRenderedMsg{imageRows: 15})
+	m, _ = update(m, attach.RenderedMsg{ImageRows: 15})
 	if m.imageRows != 15 {
 		t.Errorf("expected imageRows 15, got %d", m.imageRows)
 	}
@@ -639,9 +640,9 @@ func TestRenderAttachment_oob(t *testing.T) {
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = 5
 	msg := m.renderAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to render" {
 		t.Errorf("expected 'No image to render', got %q", string(errMsg))
@@ -655,9 +656,9 @@ func TestOpenAttachment_oob(t *testing.T) {
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = -1
 	msg := m.openAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to open" {
 		t.Errorf("expected 'No image to open', got %q", string(errMsg))

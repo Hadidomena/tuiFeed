@@ -3,14 +3,13 @@ package feed
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bluesky-social/indigo/xrpc"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
 )
@@ -24,11 +23,6 @@ type OpenThreadMsg struct {
 type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
-
-type imageRenderedMsg struct {
-	imageRows int
-	status    string
-}
 
 type Model struct {
 	cfg         *config.Config
@@ -296,9 +290,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadErrorMsg:
 		m.loading = false
 		m.statusMsg = string(msg)
-	case imageRenderedMsg:
-		m.imageRows = msg.imageRows
-		m.statusMsg = msg.status
+	case attach.ErrorMsg:
+		m.statusMsg = string(msg)
+	case attach.RenderedMsg:
+		m.imageRows = msg.ImageRows
+		m.statusMsg = msg.Status
 	}
 
 	return m, nil
@@ -306,46 +302,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderAttachment() tea.Msg {
 	post := m.posts[m.cursor]
-	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
-		return loadErrorMsg("No image to render")
-	}
-
 	postText := bsk.FormatPost(post, m.imgCursor)
 	postLines := strings.Count(postText, "\n")
 	yOffset := 5 + postLines
-
-	bsk.ClearImages()
-	rows, err := bsk.RenderImage(post.Embeds[m.imgCursor], yOffset)
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Render failed: %v", err))
-	}
-	return imageRenderedMsg{
-		imageRows: rows,
-		status:    fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
-	}
+	return attach.Render(post.Embeds, m.imgCursor, yOffset)
 }
 
 func (m Model) openAttachment() tea.Msg {
 	post := m.posts[m.cursor]
-	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
-		return loadErrorMsg("No image to open")
-	}
-
-	resp, err := http.Get(post.Embeds[m.imgCursor])
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Download failed: %v", err))
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Read failed: %v", err))
-	}
-
-	if err := bsk.RenderImageExternal(data); err != nil {
-		return loadErrorMsg(fmt.Sprintf("Open failed: %v", err))
-	}
-	return loadErrorMsg("Opened externally")
+	return attach.Open(post.Embeds, m.imgCursor)
 }
 
 func (m Model) View() tea.View {
