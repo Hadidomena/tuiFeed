@@ -142,7 +142,13 @@ func (m Model) View() tea.View {
 	b.WriteString(strings.Repeat("─", 30))
 	b.WriteString("\n\n")
 
-	b.WriteString(strings.Join(m.breadcrumb, " > "))
+	const maxBreadcrumb = 5
+	if len(m.breadcrumb) > maxBreadcrumb {
+		b.WriteString("... > ")
+		b.WriteString(strings.Join(m.breadcrumb[len(m.breadcrumb)-maxBreadcrumb:], " > "))
+	} else {
+		b.WriteString(strings.Join(m.breadcrumb, " > "))
+	}
 	b.WriteString("\n\n")
 
 	if len(m.replies) == 0 {
