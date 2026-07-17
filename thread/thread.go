@@ -148,7 +148,11 @@ func (m Model) View() tea.View {
 	if len(m.replies) == 0 {
 		b.WriteString("  No replies yet.\n")
 	} else {
-		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), map[bool]string{true: "y", false: "ies"}[len(m.replies) == 1]))
+		replyLabel := "ies"
+		if len(m.replies) == 1 {
+			replyLabel = "y"
+		}
+		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), replyLabel))
 
 		end := m.scrollPos + m.pageSize
 		if end > len(m.replies) {
@@ -189,7 +193,11 @@ func (m Model) View() tea.View {
 				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(reply.Post.Embeds)))
 			}
 			if len(reply.Replies) > 0 {
-				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), map[bool]string{true: "y", false: "ies"}[len(reply.Replies) == 1]))
+				nestedLabel := "ies"
+				if len(reply.Replies) == 1 {
+					nestedLabel = "y"
+				}
+				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), nestedLabel))
 			}
 			b.WriteString("\n")
 		}
