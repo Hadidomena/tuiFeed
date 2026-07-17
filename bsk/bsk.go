@@ -65,15 +65,41 @@ func BuildThreadTree(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
 	}
 
 	if threadView.Parent != nil && threadView.Parent.FeedDefs_ThreadViewPost != nil {
-		parentNode := BuildThreadTree(threadView.Parent.FeedDefs_ThreadViewPost)
-		if parentNode != nil {
-			node.Parent = parentNode
+		parent := threadView.Parent.FeedDefs_ThreadViewPost
+		if parent.Post != nil {
+			node.Parent = &ThreadNode{
+				Post: ExtractPostInfo(parent.Post),
+				URI:  parent.Post.Uri,
+			}
 		}
 	}
 
 	for _, reply := range threadView.Replies {
 		if reply.FeedDefs_ThreadViewPost != nil {
-			child := BuildThreadTree(reply.FeedDefs_ThreadViewPost)
+			child := buildThreadNode(reply.FeedDefs_ThreadViewPost)
+			if child != nil {
+				child.Parent = node
+				node.Replies = append(node.Replies, child)
+			}
+		}
+	}
+
+	return node
+}
+
+func buildThreadNode(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
+	if threadView == nil || threadView.Post == nil {
+		return nil
+	}
+
+	node := &ThreadNode{
+		Post: ExtractPostInfo(threadView.Post),
+		URI:  threadView.Post.Uri,
+	}
+
+	for _, reply := range threadView.Replies {
+		if reply.FeedDefs_ThreadViewPost != nil {
+			child := buildThreadNode(reply.FeedDefs_ThreadViewPost)
 			if child != nil {
 				child.Parent = node
 				node.Replies = append(node.Replies, child)
