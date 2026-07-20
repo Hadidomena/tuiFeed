@@ -8,6 +8,7 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/config"
 	"github.com/Hadidomena/tuiFeed/feed"
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 	"github.com/Hadidomena/tuiFeed/thread"
 )
 
@@ -36,7 +37,7 @@ func TestDashboardInit(t *testing.T) {
 
 func TestDashboardUpdate_quit(t *testing.T) {
 	m := NewDashboardModel()
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	_, cmd := m.Update(testutil.KeyRune('q'))
 	if cmd == nil {
 		t.Fatal("expected Quit command for q")
 	}
@@ -45,15 +46,15 @@ func TestDashboardUpdate_quit(t *testing.T) {
 func TestDashboardUpdate_upK(t *testing.T) {
 	m := NewDashboardModel()
 	m.cursor = 2
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0, got %d", m.cursor)
 	}
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor still 0, got %d", m.cursor)
 	}
@@ -61,19 +62,19 @@ func TestDashboardUpdate_upK(t *testing.T) {
 
 func TestDashboardUpdate_downJ(t *testing.T) {
 	m := NewDashboardModel()
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 3 {
 		t.Errorf("expected cursor 3, got %d", m.cursor)
 	}
-	m = updateDashboard(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 3 {
 		t.Errorf("expected cursor still 3, got %d", m.cursor)
 	}
@@ -95,7 +96,7 @@ func TestDashboardUpdate_enter(t *testing.T) {
 	for _, tt := range tests {
 		m := NewDashboardModel()
 		m.cursor = tt.cursor
-		_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
 		if cmd == nil {
 			t.Fatalf("cursor %d: expected command", tt.cursor)
 		}
@@ -160,7 +161,7 @@ func updateAccountSelect(m AccountSelectModel, msg tea.Msg) AccountSelectModel {
 func TestAccountSelectUpdate_esc(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewAccountSelectModel(cfg)
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
 	if cmd == nil {
 		t.Fatal("expected BackToDashboardMsg for esc")
 	}
@@ -174,15 +175,15 @@ func TestAccountSelectUpdate_upDown(t *testing.T) {
 	cfg := &config.Config{Follows: []string{"a.bsky.social", "b.bsky.social", "c.bsky.social"}}
 	m := NewAccountSelectModel(cfg)
 	m.cursor = 2
-	m = updateAccountSelect(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateAccountSelect(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
-	m = updateAccountSelect(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor still 2, got %d", m.cursor)
 	}
@@ -191,7 +192,7 @@ func TestAccountSelectUpdate_upDown(t *testing.T) {
 func TestAccountSelectUpdate_enter(t *testing.T) {
 	cfg := &config.Config{Follows: []string{"a.bsky.social"}}
 	m := NewAccountSelectModel(cfg)
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatal("expected command for enter")
 	}
@@ -208,7 +209,7 @@ func TestAccountSelectUpdate_enter(t *testing.T) {
 func TestAccountSelectUpdate_enterEmpty(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewAccountSelectModel(cfg)
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	if cmd != nil {
 		t.Error("expected nil command for enter on empty list")
 	}
@@ -257,7 +258,7 @@ func TestLoadingInit(t *testing.T) {
 
 func TestLoadingUpdate(t *testing.T) {
 	m := LoadingModel{}
-	newModel, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	newModel, cmd := m.Update(testutil.KeyRune('q'))
 	if cmd != nil {
 		t.Error("expected nil command")
 	}
@@ -287,7 +288,7 @@ func TestLoadingView(t *testing.T) {
 
 func TestUpdateSubModel(t *testing.T) {
 	d := NewDashboardModel()
-	_, cmd := updateSubModel(d, tea.KeyPressMsg{Code: 'q'})
+	_, cmd := updateSubModel(d, testutil.KeyRune('q'))
 	if cmd == nil {
 		t.Fatal("expected command from updateSubModel")
 	}
