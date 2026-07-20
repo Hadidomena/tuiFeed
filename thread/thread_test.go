@@ -176,7 +176,7 @@ func TestView_helpBar_atRoot(t *testing.T) {
 	if !strings.Contains(v.Content, "[j/k]") {
 		t.Errorf("expected 'j/k' in help bar, got: %s", v.Content)
 	}
-	if !strings.Contains(v.Content, "[esc] back") {
+	if !strings.Contains(v.Content, "[esc] to feed") {
 		t.Errorf("expected 'esc' in help bar, got: %s", v.Content)
 	}
 }
