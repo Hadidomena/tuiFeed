@@ -13,6 +13,9 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/lex/util"
+	"github.com/bluesky-social/indigo/xrpc"
+
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 )
 
 func ptr[T any](v T) *T {
@@ -38,6 +41,14 @@ func makePostView(opts ...func(*bsky.FeedDefs_PostView)) *bsky.FeedDefs_PostView
 		opt(p)
 	}
 	return p
+}
+
+func newTestClient(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *xrpc.Client) {
+	t.Helper()
+	server := testutil.NewTestServer(t, handler)
+	client := NewClient()
+	client.Host = server.URL
+	return server, client
 }
 
 func TestExtractPostInfo_basic(t *testing.T) {
@@ -116,7 +127,7 @@ func TestExtractPostInfo_noRecord(t *testing.T) {
 }
 
 func TestGetPostThread_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -188,11 +199,6 @@ func TestGetPostThread_success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	thread, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -222,14 +228,9 @@ func TestGetPostThread_shortURL(t *testing.T) {
 }
 
 func TestGetPostThread_resolveError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err == nil {
 		t.Fatal("expected error for failed handle resolution")
@@ -237,7 +238,7 @@ func TestGetPostThread_resolveError(t *testing.T) {
 }
 
 func TestGetPostThread_threadError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -248,11 +249,6 @@ func TestGetPostThread_threadError(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err == nil {
 		t.Fatal("expected error for failed thread fetch")
@@ -537,7 +533,7 @@ func TestBuildThreadTree_childParentLink(t *testing.T) {
 }
 
 func TestGetThreadByURI_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
@@ -581,11 +577,6 @@ func TestGetThreadByURI_success(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	node, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -611,14 +602,9 @@ func TestGetThreadByURI_success(t *testing.T) {
 }
 
 func TestGetThreadByURI_apiError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for API failure")
@@ -626,7 +612,7 @@ func TestGetThreadByURI_apiError(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilThread(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
@@ -634,11 +620,6 @@ func TestGetThreadByURI_nilThread(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil thread")
@@ -646,17 +627,12 @@ func TestGetThreadByURI_nilThread(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilOutputThread(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: nil,
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil Thread")
@@ -664,15 +640,10 @@ func TestGetThreadByURI_nilOutputThread(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilOutput(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("null"))
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil output")
@@ -680,7 +651,7 @@ func TestGetThreadByURI_nilOutput(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
@@ -690,11 +661,6 @@ func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil Post in ThreadViewPost")
@@ -709,7 +675,7 @@ func TestGetPostThread_invalidURL(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -746,11 +712,6 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -781,7 +742,7 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -796,11 +757,6 @@ func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -815,7 +771,7 @@ func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -849,11 +805,6 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "some-cursor", 50)
 	if err != nil {
@@ -868,7 +819,7 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -880,11 +831,6 @@ func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "nonexistent.bsky.social", "", 50)
 	if err == nil {
@@ -893,7 +839,7 @@ func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_feedError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -910,11 +856,6 @@ func TestGetAuthorFeedCursor_feedError(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err == nil {
@@ -964,7 +905,7 @@ func TestFormatPost_empty(t *testing.T) {
 }
 
 func TestGetAuthorFeed_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 			Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -991,11 +932,6 @@ func TestGetAuthorFeed_success(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1012,7 +948,7 @@ func TestGetAuthorFeed_success(t *testing.T) {
 }
 
 func TestGetAuthorFeed_withNilPosts(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 			Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -1038,11 +974,6 @@ func TestGetAuthorFeed_withNilPosts(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1056,14 +987,9 @@ func TestGetAuthorFeed_withNilPosts(t *testing.T) {
 }
 
 func TestGetAuthorFeed_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err == nil {
 		t.Fatal("expected error for feed fetch failure")
@@ -1209,7 +1135,7 @@ func TestClearImages(t *testing.T) {
 }
 
 func TestRenderImage_downloadError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	server.Close()
@@ -1221,14 +1147,13 @@ func TestRenderImage_downloadError(t *testing.T) {
 }
 
 func TestRenderImage_notAnImage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, err := w.Write([]byte("<html></html>"))
 		if err != nil {
 			t.Fatal("error during Write")
 		}
 	}))
-	defer server.Close()
 
 	_, err := RenderImage(server.URL, 0)
 	if err == nil {
@@ -1237,14 +1162,13 @@ func TestRenderImage_notAnImage(t *testing.T) {
 }
 
 func TestRenderImage_decodeError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, err := w.Write([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0})
 		if err != nil {
 			t.Fatal("error during Write")
 		}
 	}))
-	defer server.Close()
 
 	_, err := RenderImage(server.URL, 0)
 	if err == nil {
@@ -1301,7 +1225,7 @@ func TestResizeToFit_heightConstrained(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
@@ -1337,11 +1261,6 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -1359,7 +1278,7 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 }
 
 func TestGetPosts_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{
@@ -1399,11 +1318,6 @@ func TestGetPosts_success(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1423,17 +1337,12 @@ func TestGetPosts_success(t *testing.T) {
 }
 
 func TestGetPosts_empty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1444,7 +1353,7 @@ func TestGetPosts_empty(t *testing.T) {
 }
 
 func TestGetPosts_nilEntries(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{
@@ -1468,11 +1377,6 @@ func TestGetPosts_nilEntries(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2", "at://uri/3"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1486,14 +1390,9 @@ func TestGetPosts_nilEntries(t *testing.T) {
 }
 
 func TestGetPosts_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
 	if err == nil {
 		t.Fatal("expected error for failed fetch")
@@ -1502,7 +1401,7 @@ func TestGetPosts_error(t *testing.T) {
 
 func TestGetPosts_batching(t *testing.T) {
 	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 		query := r.URL.Query()
 		uris := query["uris"]
@@ -1529,11 +1428,6 @@ func TestGetPosts_batching(t *testing.T) {
 			Posts: posts,
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	uris := make([]string, 30)
 	for i := range uris {
 		uris[i] = "at://uri/" + string(rune('A'+i))
