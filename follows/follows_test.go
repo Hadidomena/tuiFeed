@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 )
 
 func setupTestConfig(t *testing.T) {
@@ -62,7 +63,7 @@ func TestUpdateList_esc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
 	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
 	if cmd == nil {
 		t.Fatal("expected BackMsg command for esc")
 	}
@@ -79,11 +80,11 @@ func TestUpdateList_upK(t *testing.T) {
 		t.Fatalf("NewModel: %v", err)
 	}
 	m.cursor = 1
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0, got %d", m.cursor)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor still 0 (at start), got %d", m.cursor)
 	}
@@ -95,11 +96,11 @@ func TestUpdateList_downJ(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'j'})
+	m, _ = updateFollows(m, testutil.KeyRune('j'))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor still 1 (at end), got %d", m.cursor)
 	}
@@ -111,7 +112,7 @@ func TestUpdateList_a(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'a'})
+	m, _ = updateFollows(m, testutil.KeyRune('a'))
 	if m.mode != modeInput {
 		t.Errorf("expected modeInput, got %v", m.mode)
 	}
@@ -126,7 +127,7 @@ func TestUpdateList_d(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'd'})
+	m, _ = updateFollows(m, testutil.KeyRune('d'))
 	if len(m.cfg.Follows) != 1 {
 		t.Errorf("expected 1 follow after delete, got %d", len(m.cfg.Follows))
 	}
@@ -142,7 +143,7 @@ func TestUpdateList_dAtEnd(t *testing.T) {
 		t.Fatalf("NewModel: %v", err)
 	}
 	m.cursor = 1
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'd'})
+	m, _ = updateFollows(m, testutil.KeyRune('d'))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 after deleting last, got %d", m.cursor)
 	}
@@ -159,7 +160,7 @@ func TestUpdateList_dEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := Model{cfg: cfg, cursor: 0}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'd'})
+	m, _ = updateFollows(m, testutil.KeyRune('d'))
 	if m.statusMsg != "" {
 		t.Errorf("expected no status message for empty list, got %q", m.statusMsg)
 	}
@@ -174,7 +175,7 @@ func TestUpdateInput_esc(t *testing.T) {
 	m.mode = modeInput
 	m.input = "hello"
 	m.statusMsg = "old"
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyEscape))
 	if m.mode != modeList {
 		t.Errorf("expected modeList, got %v", m.mode)
 	}
@@ -194,7 +195,7 @@ func TestUpdateInput_enterEmpty(t *testing.T) {
 	}
 	m.mode = modeInput
 	m.input = "   "
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyEnter))
 	if m.mode != modeList {
 		t.Errorf("expected modeList after empty enter, got %v", m.mode)
 	}
@@ -211,7 +212,7 @@ func TestUpdateInput_enterValid(t *testing.T) {
 	}
 	m.mode = modeInput
 	m.input = "@testuser.bsky.social"
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyEnter))
 	if m.mode != modeList {
 		t.Errorf("expected modeList, got %v", m.mode)
 	}
@@ -231,18 +232,18 @@ func TestUpdateInput_backspace(t *testing.T) {
 	}
 	m.mode = modeInput
 	m.input = "hello"
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
 	if m.input != "hell" {
 		t.Errorf("expected 'hell' after backspace, got %q", m.input)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
 	if m.input != "" {
 		t.Errorf("expected empty input, got %q", m.input)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyBackspace))
 	if m.input != "" {
 		t.Errorf("expected still empty input, got %q", m.input)
 	}
@@ -255,11 +256,11 @@ func TestUpdateInput_text(t *testing.T) {
 		t.Fatalf("NewModel: %v", err)
 	}
 	m.mode = modeInput
-	m, _ = updateFollows(m, tea.KeyPressMsg{Text: "h"})
+	m, _ = updateFollows(m, testutil.KeyRune('h'))
 	if m.input != "h" {
 		t.Errorf("expected 'h', got %q", m.input)
 	}
-	m, _ = updateFollows(m, tea.KeyPressMsg{Text: "i"})
+	m, _ = updateFollows(m, testutil.KeyRune('i'))
 	if m.input != "hi" {
 		t.Errorf("expected 'hi', got %q", m.input)
 	}
@@ -357,7 +358,7 @@ func TestUpdateList_dSaveError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: 'd'})
+	m, _ = updateFollows(m, testutil.KeyRune('d'))
 	if len(m.cfg.Follows) != 2 {
 		t.Fatalf("expected 2 follows (save failed, state unchanged), got %d", len(m.cfg.Follows))
 	}
@@ -380,5 +381,5 @@ func TestUpdateInput_enterSaveError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, _ = updateFollows(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m, _ = updateFollows(m, testutil.KeySpecial(tea.KeyEnter))
 }
