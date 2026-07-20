@@ -1,6 +1,12 @@
 package testutil
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/Hadidomena/tuiFeed/config"
+)
 
 func KeyPress(text string, code rune, mods ...tea.KeyMod) tea.KeyPressMsg {
 	var mod tea.KeyMod
@@ -16,4 +22,15 @@ func KeyRune(r rune) tea.KeyPressMsg {
 
 func KeySpecial(code rune) tea.KeyPressMsg {
 	return KeyPress("", code)
+}
+
+func SetupTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	cfg := &config.Config{}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
