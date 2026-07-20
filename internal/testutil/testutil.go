@@ -34,3 +34,12 @@ func SetupTestConfig(t *testing.T) *config.Config {
 	}
 	return cfg
 }
+
+func UpdateModel[M tea.Model](m M, msg tea.Msg) (M, *tea.Cmd) {
+	newModel, cmd := m.Update(msg)
+	result := newModel.(M)
+	if cmd != nil {
+		return result, &cmd
+	}
+	return result, nil
+}
