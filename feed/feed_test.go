@@ -666,25 +666,14 @@ func TestOpenAttachment_oob(t *testing.T) {
 	}
 }
 
-func setupFeedTestConfig(t *testing.T) {
-	t.Helper()
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	cfg := &config.Config{}
-	if err := cfg.Save(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestUpdate_sKey_save(t *testing.T) {
-	setupFeedTestConfig(t)
+	cfg := testutil.SetupTestConfig(t)
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg, _ := config.Load()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = update(m, testutil.KeyRune('s'))
@@ -699,16 +688,15 @@ func TestUpdate_sKey_save(t *testing.T) {
 }
 
 func TestUpdate_sKey_unsave(t *testing.T) {
-	setupFeedTestConfig(t)
+	cfg := testutil.SetupTestConfig(t)
+	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg, _ := config.Load()
-	cfg.SavePost("at://uri/1")
-	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = update(m, testutil.KeyRune('s'))
@@ -752,16 +740,15 @@ func TestUpdate_sKey_noURI(t *testing.T) {
 }
 
 func TestUpdate_sKey_removeFromSaved(t *testing.T) {
-	setupFeedTestConfig(t)
+	cfg := testutil.SetupTestConfig(t)
+	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg, _ := config.Load()
-	cfg.SavePost("at://uri/1")
-	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
@@ -780,16 +767,15 @@ func TestUpdate_sKey_removeFromSaved(t *testing.T) {
 }
 
 func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
-	setupFeedTestConfig(t)
+	cfg := testutil.SetupTestConfig(t)
+	cfg.SavePost("at://uri/1")
+	_ = cfg.Save()
 	posts := []bsk.FeedItem{
 		{
 			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
 			URI:      "at://uri/1",
 		},
 	}
-	cfg, _ := config.Load()
-	cfg.SavePost("at://uri/1")
-	_ = cfg.Save()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true

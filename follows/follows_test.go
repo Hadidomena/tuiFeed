@@ -12,12 +12,7 @@ import (
 
 func setupTestConfig(t *testing.T) {
 	t.Helper()
-	tmp := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("failed to load config: %v", err)
-	}
+	cfg := testutil.SetupTestConfig(t)
 	cfg.Follows = []string{"alice.bsky.social", "bob.bsky.social"}
 	if err := cfg.Save(); err != nil {
 		t.Fatal(err)
