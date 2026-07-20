@@ -3,7 +3,6 @@ package feed
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -1085,7 +1084,7 @@ func TestUpdate_loadErrorMsg_savedView(t *testing.T) {
 }
 
 func TestLoadSavedPosts_withURIs(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&indigobsky.FeedGetPosts_Output{
 			Posts: []*indigobsky.FeedDefs_PostView{
@@ -1105,7 +1104,6 @@ func TestLoadSavedPosts_withURIs(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
 
 	cfg := &config.Config{}
 	cfg.SavePost("at://uri/1")
@@ -1129,10 +1127,9 @@ func TestLoadSavedPosts_withURIs(t *testing.T) {
 }
 
 func TestLoadSavedPosts_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
 
 	cfg := &config.Config{}
 	cfg.SavePost("at://uri/1")
