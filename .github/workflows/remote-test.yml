@@ -20,6 +20,7 @@ jobs:
           - ./config
           - ./feed
           - ./thread
+          - ./attach
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
