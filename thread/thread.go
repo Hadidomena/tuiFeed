@@ -283,7 +283,7 @@ func (m Model) View() tea.View {
 		}
 		help += "  [a] attachments  [o] open"
 	}
-	help += "  [esc] back  [q] quit\n"
+	help += "  [esc] to feed  [q] quit\n"
 	b.WriteString(help)
 
 	return tea.NewView(b.String())
