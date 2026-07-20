@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -42,4 +44,11 @@ func UpdateModel[M tea.Model](m M, msg tea.Msg) (M, *tea.Cmd) {
 		return result, &cmd
 	}
 	return result, nil
+}
+
+func NewTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server
 }
