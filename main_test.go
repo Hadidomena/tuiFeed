@@ -12,11 +12,6 @@ import (
 	"github.com/Hadidomena/tuiFeed/thread"
 )
 
-func updateDashboard(m DashboardModel, msg tea.Msg) DashboardModel {
-	newModel, _ := m.Update(msg)
-	return newModel.(DashboardModel)
-}
-
 func TestNewDashboardModel(t *testing.T) {
 	m := NewDashboardModel()
 	if len(m.choices) != 4 {
@@ -46,15 +41,15 @@ func TestDashboardUpdate_quit(t *testing.T) {
 func TestDashboardUpdate_upK(t *testing.T) {
 	m := NewDashboardModel()
 	m.cursor = 2
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0, got %d", m.cursor)
 	}
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyUp))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor still 0, got %d", m.cursor)
 	}
@@ -62,19 +57,19 @@ func TestDashboardUpdate_upK(t *testing.T) {
 
 func TestDashboardUpdate_downJ(t *testing.T) {
 	m := NewDashboardModel()
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 3 {
 		t.Errorf("expected cursor 3, got %d", m.cursor)
 	}
-	m = updateDashboard(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 3 {
 		t.Errorf("expected cursor still 3, got %d", m.cursor)
 	}
@@ -153,11 +148,6 @@ func TestAccountSelectInit(t *testing.T) {
 	}
 }
 
-func updateAccountSelect(m AccountSelectModel, msg tea.Msg) AccountSelectModel {
-	newModel, _ := m.Update(msg)
-	return newModel.(AccountSelectModel)
-}
-
 func TestAccountSelectUpdate_esc(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewAccountSelectModel(cfg)
@@ -175,15 +165,15 @@ func TestAccountSelectUpdate_upDown(t *testing.T) {
 	cfg := &config.Config{Follows: []string{"a.bsky.social", "b.bsky.social", "c.bsky.social"}}
 	m := NewAccountSelectModel(cfg)
 	m.cursor = 2
-	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyUp))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
-	m = updateAccountSelect(m, testutil.KeySpecial(tea.KeyDown))
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor still 2, got %d", m.cursor)
 	}
@@ -294,11 +284,6 @@ func TestUpdateSubModel(t *testing.T) {
 	}
 }
 
-func updateMainModel(m MainModel, msg tea.Msg) MainModel {
-	r, _ := m.Update(msg)
-	return r.(MainModel)
-}
-
 func TestMainModel_OpenThreadMsg_transitions(t *testing.T) {
 	m := NewMainModel()
 	result, cmd := m.Update(feed.OpenThreadMsg{URI: "at://test/uri"})
@@ -325,9 +310,9 @@ func TestMainModel_OpenThreadMsg_showsLoadingView(t *testing.T) {
 
 func TestMainModel_ThreadBackMsg_returnsToFeed(t *testing.T) {
 	m := NewMainModel()
-	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+	mm, _ := testutil.UpdateModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
 
-	mm = updateMainModel(mm, thread.BackMsg{})
+	mm, _ = testutil.UpdateModel(mm, thread.BackMsg{})
 	if mm.state != showFeedView {
 		t.Errorf("expected showFeedView after back, got %d", mm.state)
 	}
@@ -335,7 +320,7 @@ func TestMainModel_ThreadBackMsg_returnsToFeed(t *testing.T) {
 
 func TestMainModel_OpenThreadMsg_viewDispatch(t *testing.T) {
 	m := NewMainModel()
-	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+	mm, _ := testutil.UpdateModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
 
 	v := mm.View()
 	if !strings.Contains(v.Content, "Comments") && !strings.Contains(v.Content, "Loading comments") {
@@ -346,16 +331,16 @@ func TestMainModel_OpenThreadMsg_viewDispatch(t *testing.T) {
 func TestMainModel_OpenThreadMsg_fromDifferentStates(t *testing.T) {
 	m := NewMainModel()
 	// Try from dashboard (initial state)
-	mm := updateMainModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
+	mm, _ := testutil.UpdateModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
 	if mm.state != showThreadView {
 		t.Errorf("expected showThreadView from dashboard, got %d", mm.state)
 	}
 
 	// Go back
-	mm = updateMainModel(mm, thread.BackMsg{})
+	mm, _ = testutil.UpdateModel(mm, thread.BackMsg{})
 
 	// Try from feed state
-	mm = updateMainModel(mm, feed.OpenThreadMsg{URI: "at://test/uri2"})
+	mm, _ = testutil.UpdateModel(mm, feed.OpenThreadMsg{URI: "at://test/uri2"})
 	if mm.state != showThreadView {
 		t.Errorf("expected showThreadView from feed, got %d", mm.state)
 	}
