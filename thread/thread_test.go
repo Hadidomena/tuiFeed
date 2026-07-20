@@ -9,27 +9,12 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 )
 
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
-
-func keyPress(text string, code rune, mods ...tea.KeyMod) tea.KeyPressMsg {
-	var mod tea.KeyMod
-	for _, m := range mods {
-		mod |= m
-	}
-	return tea.KeyPressMsg(tea.Key{Text: text, Code: code, Mod: mod})
-}
-
-func keyRune(r rune) tea.KeyPressMsg {
-	return keyPress(string(r), r)
-}
-
-func keySpecial(code rune) tea.KeyPressMsg {
-	return keyPress("", code)
-}
 
 func makeNode(handle, text, uri string, replies ...*bsk.ThreadNode) *bsk.ThreadNode {
 	node := &bsk.ThreadNode{
@@ -267,8 +252,8 @@ func TestUpdate_threadLoadedNilRoot(t *testing.T) {
 func TestUpdate_quitKeys(t *testing.T) {
 	m := Model{loading: true}
 	for _, key := range []tea.KeyPressMsg{
-		keyRune('q'),
-		keyPress("", 'c', tea.ModCtrl),
+		testutil.KeyRune('q'),
+		testutil.KeyPress("", 'c', tea.ModCtrl),
 	} {
 		_, cmd := m.Update(key)
 		if cmd == nil {
@@ -279,7 +264,7 @@ func TestUpdate_quitKeys(t *testing.T) {
 
 func TestUpdate_escWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	_, cmd := m.Update(keySpecial(tea.KeyEsc))
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEsc))
 	if cmd != nil {
 		t.Error("expected nil command for esc while loading")
 	}
@@ -293,7 +278,7 @@ func TestUpdate_escAfterLoading(t *testing.T) {
 		replies: root.Replies,
 	}
 
-	result, cmd := m.Update(keySpecial(tea.KeyEsc))
+	result, cmd := m.Update(testutil.KeySpecial(tea.KeyEsc))
 	if cmd == nil {
 		t.Fatal("expected non-nil command for esc after loading")
 	}
@@ -315,12 +300,12 @@ func TestUpdate_jkNavigation(t *testing.T) {
 		pageSize: 10,
 	}
 
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	if r.(Model).cursor != 1 {
 		t.Errorf("expected cursor 1 after j, got %d", m.cursor)
 	}
 
-	r, _ = m.Update(keyRune('k'))
+	r, _ = m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 after k, got %d", m.cursor)
@@ -338,7 +323,7 @@ func TestUpdate_jAtBottom(t *testing.T) {
 		pageSize: 10,
 	}
 
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 (no more items), got %d", m.cursor)
@@ -357,7 +342,7 @@ func TestUpdate_kAtTop(t *testing.T) {
 		pageSize: 10,
 	}
 
-	r, _ := m.Update(keyRune('k'))
+	r, _ := m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 (already at top), got %d", m.cursor)
@@ -376,7 +361,7 @@ func TestUpdate_enterDrillsIntoReply(t *testing.T) {
 		pageSize:   10,
 	}
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != reply {
@@ -405,7 +390,7 @@ func TestUpdate_enterNoOpOnReplyWithoutReplies(t *testing.T) {
 		breadcrumb: []string{"@author"},
 	}
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != root {
@@ -423,7 +408,7 @@ func TestUpdate_enterNoOpWhenEmptyReplies(t *testing.T) {
 		breadcrumb: []string{"@author"},
 	}
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != root {
@@ -443,7 +428,7 @@ func TestUpdate_hGoesUpToParent(t *testing.T) {
 		pageSize:   10,
 	}
 
-	r, _ := m.Update(keyRune('h'))
+	r, _ := m.Update(testutil.KeyRune('h'))
 	m = r.(Model)
 
 	if m.current != root {
@@ -468,7 +453,7 @@ func TestUpdate_hNoOpAtRoot(t *testing.T) {
 		pageSize:   10,
 	}
 
-	r, _ := m.Update(keyRune('h'))
+	r, _ := m.Update(testutil.KeyRune('h'))
 	m = r.(Model)
 
 	if m.current != root {
@@ -488,7 +473,7 @@ func TestUpdate_backspaceSameAsH(t *testing.T) {
 		pageSize:   10,
 	}
 
-	r, _ := m.Update(keySpecial(tea.KeyBackspace))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyBackspace))
 	m = r.(Model)
 
 	if m.current != root {
@@ -498,12 +483,12 @@ func TestUpdate_backspaceSameAsH(t *testing.T) {
 
 func TestUpdate_jkWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected no cursor movement while loading, got %d", m.cursor)
 	}
-	r, _ = m.Update(keyRune('k'))
+	r, _ = m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected no cursor movement while loading, got %d", m.cursor)
@@ -512,7 +497,7 @@ func TestUpdate_jkWhileLoading(t *testing.T) {
 
 func TestUpdate_enterWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 	if m.current != nil {
 		t.Error("expected no drill-in while loading")
@@ -607,7 +592,7 @@ func TestUpdate_scrollAdvances(t *testing.T) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		r, _ := m.Update(keyRune('j'))
+		r, _ := m.Update(testutil.KeyRune('j'))
 		m = r.(Model)
 	}
 
@@ -639,7 +624,7 @@ func TestUpdate_scrollRetreats(t *testing.T) {
 	}
 
 	// Press k: cursor goes from 1 to 0, which is < scrollPos (1), so scrollPos retreats to 0
-	r, _ := m.Update(keyRune('k'))
+	r, _ := m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 
 	if m.scrollPos != 0 {
@@ -751,7 +736,7 @@ func TestUpdate_aKey_rendersAttachment(t *testing.T) {
 		replies:  root.Replies,
 		pageSize: 10,
 	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd == nil {
 		t.Fatal("expected command for a key with embeds")
 	}
@@ -766,7 +751,7 @@ func TestUpdate_aKey_noEmbeds(t *testing.T) {
 		replies:  root.Replies,
 		pageSize: 10,
 	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd != nil {
 		t.Error("expected no command for a key without embeds")
 	}
@@ -780,7 +765,7 @@ func TestUpdate_aKey_noReplies(t *testing.T) {
 		replies:  root.Replies,
 		pageSize: 10,
 	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd != nil {
 		t.Error("expected no command for a key with no replies")
 	}
@@ -796,7 +781,7 @@ func TestUpdate_oKey_opensAttachment(t *testing.T) {
 		replies:  root.Replies,
 		pageSize: 10,
 	}
-	r, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	r, cmd := m.Update(testutil.KeyRune('o'))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for o key with embeds")
@@ -815,7 +800,7 @@ func TestUpdate_oKey_noEmbeds(t *testing.T) {
 		replies:  root.Replies,
 		pageSize: 10,
 	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	_, cmd := m.Update(testutil.KeyRune('o'))
 	if cmd != nil {
 		t.Error("expected no command for o key without embeds")
 	}
@@ -833,7 +818,7 @@ func TestUpdate_leftRight_imageNavigation(t *testing.T) {
 		hasRendered: true,
 		imgCursor:   1,
 	}
-	r, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	r, cmd := m.Update(testutil.KeySpecial(tea.KeyLeft))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for left arrow")
@@ -842,7 +827,7 @@ func TestUpdate_leftRight_imageNavigation(t *testing.T) {
 		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
 	}
 
-	r, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	r, cmd = m.Update(testutil.KeySpecial(tea.KeyRight))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for right arrow")
@@ -864,7 +849,7 @@ func TestUpdate_leftNoOpAtFirstImage(t *testing.T) {
 		hasRendered: true,
 		imgCursor:   0,
 	}
-	r, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyLeft))
 	m = r.(Model)
 	if m.imgCursor != 0 {
 		t.Errorf("expected imgCursor to stay 0, got %d", m.imgCursor)
@@ -906,7 +891,7 @@ func TestUpdate_jkResetsImageState(t *testing.T) {
 		imgCursor:   2,
 		statusMsg:   "some status",
 	}
-	r, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.hasRendered {
 		t.Error("expected hasRendered to be reset after j")
@@ -960,7 +945,7 @@ func TestView_downKeyNoOpAtBottom(t *testing.T) {
 		cursor:   0,
 		pageSize: 10,
 	}
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor to stay at 0 (only 1 item), got %d", m.cursor)
