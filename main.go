@@ -11,6 +11,7 @@ import (
 	"github.com/Hadidomena/tuiFeed/config"
 	"github.com/Hadidomena/tuiFeed/feed"
 	"github.com/Hadidomena/tuiFeed/follows"
+	"github.com/Hadidomena/tuiFeed/thread"
 )
 
 type sessionState int
@@ -23,6 +24,7 @@ const (
 	showSinceLastCheckView
 	showLoadingView
 	showSavedPostsView
+	showThreadView
 )
 
 type OpenFollowsMsg struct{}
@@ -199,6 +201,7 @@ type MainModel struct {
 	follows       follows.Model
 	accountSelect AccountSelectModel
 	feed          feed.Model
+	thread        thread.Model
 	loading       LoadingModel
 }
 
@@ -261,6 +264,13 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case feed.BackMsg:
 		m.state = showDashboardView
 		return m, nil
+	case feed.OpenThreadMsg:
+		m.state = showThreadView
+		m.thread = thread.NewModel(msg.URI)
+		return m, m.thread.Init()
+	case thread.BackMsg:
+		m.state = showFeedView
+		return m, nil
 	case OpenAccountSelectMsg:
 		m.state = showAccountSelectView
 		m.cfg, _ = config.Load()
@@ -302,6 +312,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feed, cmd = updateSubModel(m.feed, msg)
 	case showSavedPostsView:
 		m.feed, cmd = updateSubModel(m.feed, msg)
+	case showThreadView:
+		m.thread, cmd = updateSubModel(m.thread, msg)
 	}
 
 	return m, cmd
@@ -326,6 +338,8 @@ func (m MainModel) View() tea.View {
 		return m.feed.View()
 	case showSavedPostsView:
 		return m.feed.View()
+	case showThreadView:
+		return m.thread.View()
 	case showLoadingView:
 		return m.loading.View()
 	default:

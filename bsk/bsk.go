@@ -29,6 +29,87 @@ type Thread struct {
 	Replies []PostInfo
 }
 
+type ThreadNode struct {
+	Post    PostInfo
+	URI     string
+	Parent  *ThreadNode
+	Replies []*ThreadNode
+}
+
+func GetThreadByURI(ctx context.Context, client *xrpc.Client, atURI string) (*ThreadNode, error) {
+	threadOutput, err := bsky.FeedGetPostThread(ctx, client, 0, 0, atURI)
+	if err != nil {
+		return nil, fmt.Errorf("fetching thread: %w", err)
+	}
+	if threadOutput == nil || threadOutput.Thread == nil {
+		return nil, fmt.Errorf("empty response from server")
+	}
+	if threadOutput.Thread.FeedDefs_ThreadViewPost == nil {
+		return nil, fmt.Errorf("post not found or not accessible")
+	}
+	root := BuildThreadTree(threadOutput.Thread.FeedDefs_ThreadViewPost)
+	if root == nil {
+		return nil, fmt.Errorf("failed to parse thread (post is nil)")
+	}
+	return root, nil
+}
+
+func BuildThreadTree(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
+	if threadView == nil || threadView.Post == nil {
+		return nil
+	}
+
+	node := &ThreadNode{
+		Post: ExtractPostInfo(threadView.Post),
+		URI:  threadView.Post.Uri,
+	}
+
+	if threadView.Parent != nil && threadView.Parent.FeedDefs_ThreadViewPost != nil {
+		parent := threadView.Parent.FeedDefs_ThreadViewPost
+		if parent.Post != nil {
+			node.Parent = &ThreadNode{
+				Post: ExtractPostInfo(parent.Post),
+				URI:  parent.Post.Uri,
+			}
+		}
+	}
+
+	for _, reply := range threadView.Replies {
+		if reply.FeedDefs_ThreadViewPost != nil {
+			child := buildThreadNode(reply.FeedDefs_ThreadViewPost)
+			if child != nil {
+				child.Parent = node
+				node.Replies = append(node.Replies, child)
+			}
+		}
+	}
+
+	return node
+}
+
+func buildThreadNode(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
+	if threadView == nil || threadView.Post == nil {
+		return nil
+	}
+
+	node := &ThreadNode{
+		Post: ExtractPostInfo(threadView.Post),
+		URI:  threadView.Post.Uri,
+	}
+
+	for _, reply := range threadView.Replies {
+		if reply.FeedDefs_ThreadViewPost != nil {
+			child := buildThreadNode(reply.FeedDefs_ThreadViewPost)
+			if child != nil {
+				child.Parent = node
+				node.Replies = append(node.Replies, child)
+			}
+		}
+	}
+
+	return node
+}
+
 func NewClient() *xrpc.Client {
 	return &xrpc.Client{
 		Host: "https://public.api.bsky.app",
@@ -211,6 +292,53 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 		nextCursor = *out.Cursor
 	}
 	return posts, nextCursor, nil
+}
+
+func FormatPostListItem(post PostInfo, cursor bool) string {
+	var b strings.Builder
+
+	cursorStr := "  "
+	if cursor {
+		cursorStr = "> "
+	}
+
+	createdAt := post.IndexedAt
+	if createdAt == "" {
+		createdAt = post.CreatedAt
+	}
+	if len(createdAt) > 10 {
+		createdAt = createdAt[:10]
+	}
+
+	author := post.AuthorDisplayName
+	if author == "" {
+		author = post.AuthorHandle
+	}
+
+	b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
+		cursorStr, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
+
+	text := strings.TrimSpace(post.Text)
+	if len(text) > 120 {
+		text = text[:120] + "..."
+	}
+	text = strings.ReplaceAll(text, "\n", " ")
+	b.WriteString(fmt.Sprintf("    %s\n", text))
+
+	if len(post.Embeds) > 0 {
+		b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
+	}
+
+	return b.String()
+}
+
+func WriteMoreIndicators(b *strings.Builder, scrollPos, end, total int) {
+	if scrollPos > 0 {
+		b.WriteString(fmt.Sprintf("  ... %d more above\n", scrollPos))
+	}
+	if end < total {
+		b.WriteString(fmt.Sprintf("  ... %d more below\n", total-end))
+	}
 }
 
 func GetPosts(ctx context.Context, client *xrpc.Client, uris []string) ([]FeedItem, error) {

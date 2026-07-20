@@ -3,28 +3,26 @@ package feed
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bluesky-social/indigo/xrpc"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
 )
 
 type BackMsg struct{}
 
+type OpenThreadMsg struct {
+	URI string
+}
+
 type postsLoadedMsg []bsk.FeedItem
 
 type loadErrorMsg string
-
-type imageRenderedMsg struct {
-	imageRows int
-	status    string
-}
 
 type Model struct {
 	cfg         *config.Config
@@ -257,6 +255,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.cfg = fresh
+		case "c":
+			if len(m.posts) > 0 && m.cursor < len(m.posts) {
+				uri := m.posts[m.cursor].URI
+				if uri != "" {
+					return m, func() tea.Msg {
+						return OpenThreadMsg{URI: uri}
+					}
+				}
+			}
 		case "r":
 			if m.isSavedView {
 				return m, nil
@@ -283,9 +290,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadErrorMsg:
 		m.loading = false
 		m.statusMsg = string(msg)
-	case imageRenderedMsg:
-		m.imageRows = msg.imageRows
-		m.statusMsg = msg.status
+	case attach.ErrorMsg:
+		m.statusMsg = string(msg)
+	case attach.RenderedMsg:
+		m.imageRows = msg.ImageRows
+		m.statusMsg = msg.Status
 	}
 
 	return m, nil
@@ -293,46 +302,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderAttachment() tea.Msg {
 	post := m.posts[m.cursor]
-	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
-		return loadErrorMsg("No image to render")
-	}
-
 	postText := bsk.FormatPost(post, m.imgCursor)
 	postLines := strings.Count(postText, "\n")
 	yOffset := 5 + postLines
-
-	bsk.ClearImages()
-	rows, err := bsk.RenderImage(post.Embeds[m.imgCursor], yOffset)
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Render failed: %v", err))
-	}
-	return imageRenderedMsg{
-		imageRows: rows,
-		status:    fmt.Sprintf("Image %d/%d  [←/→] navigate  [o] open externally", m.imgCursor+1, len(post.Embeds)),
-	}
+	return attach.Render(post.Embeds, m.imgCursor, yOffset)
 }
 
 func (m Model) openAttachment() tea.Msg {
 	post := m.posts[m.cursor]
-	if m.imgCursor >= len(post.Embeds) || m.imgCursor < 0 {
-		return loadErrorMsg("No image to open")
-	}
-
-	resp, err := http.Get(post.Embeds[m.imgCursor])
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Download failed: %v", err))
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return loadErrorMsg(fmt.Sprintf("Read failed: %v", err))
-	}
-
-	if err := bsk.RenderImageExternal(data); err != nil {
-		return loadErrorMsg(fmt.Sprintf("Open failed: %v", err))
-	}
-	return loadErrorMsg("Opened externally")
+	return attach.Open(post.Embeds, m.imgCursor)
 }
 
 func (m Model) View() tea.View {
@@ -362,47 +340,11 @@ func (m Model) View() tea.View {
 		}
 
 		for i := m.scrollPos; i < end; i++ {
-			post := m.posts[i]
-			cursor := "  "
-			if m.cursor == i {
-				cursor = "> "
-			}
-
-			createdAt := post.IndexedAt
-			if createdAt == "" {
-				createdAt = post.CreatedAt
-			}
-			if len(createdAt) > 10 {
-				createdAt = createdAt[:10]
-			}
-
-			author := post.AuthorDisplayName
-			if author == "" {
-				author = post.AuthorHandle
-			}
-
-			b.WriteString(fmt.Sprintf("%s@%s (%s)  \u2764\ufe0f %d  \U0001f4ac %d  \U0001f4c5 %s\n",
-				cursor, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
-
-			text := strings.TrimSpace(post.Text)
-			if len(text) > 120 {
-				text = text[:120] + "..."
-			}
-			text = strings.ReplaceAll(text, "\n", " ")
-			b.WriteString(fmt.Sprintf("    %s\n", text))
-
-			if len(post.Embeds) > 0 {
-				b.WriteString(fmt.Sprintf("    [%d attachment(s)]\n", len(post.Embeds)))
-			}
+			b.WriteString(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i))
 			b.WriteString("\n")
 		}
 
-		if m.scrollPos > 0 {
-			b.WriteString(fmt.Sprintf("  ... %d more above\n", m.scrollPos))
-		}
-		if end < len(m.posts) {
-			b.WriteString(fmt.Sprintf("  ... %d more below\n", len(m.posts)-end))
-		}
+		bsk.WriteMoreIndicators(&b, m.scrollPos, end, len(m.posts))
 		idx := m.cursor
 		if idx >= len(m.posts) {
 			idx = 0
@@ -430,9 +372,9 @@ func (m Model) View() tea.View {
 			b.WriteString("\n[s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
 		}
 	} else if m.hasRendered && len(m.posts) > 0 && m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 1 {
-		b.WriteString("\n[←/→] prev/next image  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[←/→] prev/next image  [c] comments  [o] open externally  [s] save  [r] refresh  [esc] back  [q] quit\n")
 	} else {
-		b.WriteString("\n[s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[c] comments  [s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
 	return tea.NewView(b.String())
 }

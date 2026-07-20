@@ -333,6 +333,374 @@ func TestGetExtantEmbeds_nilPost(t *testing.T) {
 	}
 }
 
+func TestBuildThreadTree_nil(t *testing.T) {
+	node := BuildThreadTree(nil)
+	if node != nil {
+		t.Errorf("expected nil, got %v", node)
+	}
+}
+
+func TestBuildThreadTree_nilPost(t *testing.T) {
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{Post: nil})
+	if node != nil {
+		t.Errorf("expected nil, got %v", node)
+	}
+}
+
+func TestBuildThreadTree_leaf(t *testing.T) {
+	post := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:test/app.bsky.feed.post/leaf"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: post,
+	})
+
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if node.URI != "at://did:plc:test/app.bsky.feed.post/leaf" {
+		t.Errorf("expected URI, got %q", node.URI)
+	}
+	if node.Parent != nil {
+		t.Errorf("expected nil parent, got %v", node.Parent)
+	}
+	if len(node.Replies) != 0 {
+		t.Errorf("expected 0 replies, got %d", len(node.Replies))
+	}
+	if node.Post.Text != "Hello world" {
+		t.Errorf("expected 'Hello world', got %q", node.Post.Text)
+	}
+}
+
+func TestBuildThreadTree_withParent(t *testing.T) {
+	parent := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:parent/app.bsky.feed.post/parent"
+		p.Author.Handle = "parent.bsky.social"
+		p.IndexedAt = "2024-06-01T11:00:00Z"
+	})
+	child := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:child/app.bsky.feed.post/child"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: child,
+		Parent: &bsky.FeedDefs_ThreadViewPost_Parent{
+			FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+				Post: parent,
+			},
+		},
+	})
+
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if node.Parent == nil {
+		t.Fatal("expected parent node")
+	}
+	if node.Parent.URI != "at://did:plc:parent/app.bsky.feed.post/parent" {
+		t.Errorf("expected parent URI, got %q", node.Parent.URI)
+	}
+	if node.Parent.Post.AuthorHandle != "parent.bsky.social" {
+		t.Errorf("expected parent handle, got %q", node.Parent.Post.AuthorHandle)
+	}
+}
+
+func TestBuildThreadTree_withReplies(t *testing.T) {
+	root := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:root/app.bsky.feed.post/root"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+	reply1 := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:r1/app.bsky.feed.post/r1"
+		p.Author.Handle = "replier1.bsky.social"
+		p.IndexedAt = "2024-06-01T13:00:00Z"
+	})
+	reply2 := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:r2/app.bsky.feed.post/r2"
+		p.Author.Handle = "replier2.bsky.social"
+		p.IndexedAt = "2024-06-01T14:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: root,
+		Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+			{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{Post: reply1}},
+			{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{Post: reply2}},
+		},
+	})
+
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if len(node.Replies) != 2 {
+		t.Fatalf("expected 2 replies, got %d", len(node.Replies))
+	}
+	if node.Replies[0].URI != "at://did:plc:r1/app.bsky.feed.post/r1" {
+		t.Errorf("expected reply1 URI, got %q", node.Replies[0].URI)
+	}
+	if node.Replies[1].Post.AuthorHandle != "replier2.bsky.social" {
+		t.Errorf("expected replier2 handle, got %q", node.Replies[1].Post.AuthorHandle)
+	}
+}
+
+func TestBuildThreadTree_nestedReplies(t *testing.T) {
+	root := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:root/app.bsky.feed.post/root"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+	reply := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:reply/app.bsky.feed.post/reply"
+		p.IndexedAt = "2024-06-01T13:00:00Z"
+	})
+	nested := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:nested/app.bsky.feed.post/nested"
+		p.IndexedAt = "2024-06-01T14:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: root,
+		Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+			{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+				Post: reply,
+				Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+					{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{Post: nested}},
+				},
+			}},
+		},
+	})
+
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if len(node.Replies) != 1 {
+		t.Fatalf("expected 1 reply, got %d", len(node.Replies))
+	}
+	if node.Replies[0].URI != "at://did:plc:reply/app.bsky.feed.post/reply" {
+		t.Errorf("expected reply URI, got %q", node.Replies[0].URI)
+	}
+	if len(node.Replies[0].Replies) != 1 {
+		t.Fatalf("expected 1 nested reply, got %d", len(node.Replies[0].Replies))
+	}
+	if node.Replies[0].Replies[0].URI != "at://did:plc:nested/app.bsky.feed.post/nested" {
+		t.Errorf("expected nested URI, got %q", node.Replies[0].Replies[0].URI)
+	}
+}
+
+func TestBuildThreadTree_skipsNonPostReplies(t *testing.T) {
+	root := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:root/app.bsky.feed.post/root"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: root,
+		Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+			{FeedDefs_NotFoundPost: &bsky.FeedDefs_NotFoundPost{}},
+			{FeedDefs_BlockedPost: &bsky.FeedDefs_BlockedPost{}},
+		},
+	})
+
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if len(node.Replies) != 0 {
+		t.Errorf("expected 0 replies (skipped non-post types), got %d", len(node.Replies))
+	}
+}
+
+func TestBuildThreadTree_childParentLink(t *testing.T) {
+	root := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:root/app.bsky.feed.post/root"
+		p.IndexedAt = "2024-06-01T12:00:00Z"
+	})
+	reply := makePostView(func(p *bsky.FeedDefs_PostView) {
+		p.Uri = "at://did:plc:reply/app.bsky.feed.post/reply"
+		p.IndexedAt = "2024-06-01T13:00:00Z"
+	})
+
+	node := BuildThreadTree(&bsky.FeedDefs_ThreadViewPost{
+		Post: root,
+		Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+			{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{Post: reply}},
+		},
+	})
+
+	if len(node.Replies) != 1 {
+		t.Fatalf("expected 1 reply, got %d", len(node.Replies))
+	}
+	if node.Replies[0].Parent != node {
+		t.Error("expected child.Parent to point to root node")
+	}
+}
+
+func TestGetThreadByURI_success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: &bsky.FeedGetPostThread_Output_Thread{
+				FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+					Post: &bsky.FeedDefs_PostView{
+						Uri:       "at://did:plc:test/app.bsky.feed.post/abc",
+						Cid:       "bafy-test",
+						IndexedAt: "2024-06-01T12:00:00Z",
+						Author: &bsky.ActorDefs_ProfileViewBasic{
+							Did:         "did:plc:test",
+							Handle:      "test.bsky.social",
+							DisplayName: ptr("Test User"),
+						},
+						Record: &util.LexiconTypeDecoder{
+							Val: &bsky.FeedPost{
+								Text:      "Thread root",
+								CreatedAt: "2024-06-01T12:00:00Z",
+							},
+						},
+						LikeCount:  ptr[int64](10),
+						ReplyCount: ptr[int64](2),
+					},
+					Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
+						{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+							Post: &bsky.FeedDefs_PostView{
+								Uri:       "at://did:plc:reply/app.bsky.feed.post/r1",
+								IndexedAt: "2024-06-01T13:00:00Z",
+								Author: &bsky.ActorDefs_ProfileViewBasic{
+									Handle: "replier.bsky.social",
+								},
+								Record: &util.LexiconTypeDecoder{
+									Val: &bsky.FeedPost{
+										Text:      "A reply",
+										CreatedAt: "2024-06-01T13:00:00Z",
+									},
+								},
+							},
+						}},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	node, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if node == nil {
+		t.Fatal("expected non-nil node")
+	}
+	if node.URI != "at://did:plc:test/app.bsky.feed.post/abc" {
+		t.Errorf("expected URI, got %q", node.URI)
+	}
+	if node.Post.Text != "Thread root" {
+		t.Errorf("expected 'Thread root', got %q", node.Post.Text)
+	}
+	if len(node.Replies) != 1 {
+		t.Fatalf("expected 1 reply, got %d", len(node.Replies))
+	}
+	if node.Replies[0].Post.Text != "A reply" {
+		t.Errorf("expected 'A reply', got %q", node.Replies[0].Post.Text)
+	}
+	if node.Replies[0].Parent != node {
+		t.Error("expected reply.Parent to point to root")
+	}
+}
+
+func TestGetThreadByURI_apiError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestGetThreadByURI_nilThread(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: &bsky.FeedGetPostThread_Output_Thread{
+				FeedDefs_ThreadViewPost: nil,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil thread")
+	}
+}
+
+func TestGetThreadByURI_nilOutputThread(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: nil,
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil Thread")
+	}
+}
+
+func TestGetThreadByURI_nilOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("null"))
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil output")
+	}
+}
+
+func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
+			Thread: &bsky.FeedGetPostThread_Output_Thread{
+				FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
+					Post: nil,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.Host = server.URL
+
+	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
+	if err == nil {
+		t.Fatal("expected error for nil Post in ThreadViewPost")
+	}
+}
+
 func TestGetPostThread_invalidURL(t *testing.T) {
 	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
 	if err == nil {
@@ -1180,5 +1548,123 @@ func TestGetPosts_batching(t *testing.T) {
 	}
 	if requestCount != 2 {
 		t.Errorf("expected 2 batch requests, got %d", requestCount)
+	}
+}
+
+func TestFormatPostListItem_basic(t *testing.T) {
+	post := PostInfo{
+		AuthorDisplayName: "Test User",
+		AuthorHandle:      "test.bsky.social",
+		Text:              "Hello world",
+		LikeCount:         42,
+		ReplyCount:        7,
+		IndexedAt:         "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, true)
+	if !strings.Contains(result, "> @test.bsky.social") {
+		t.Errorf("expected cursor and handle, got: %s", result)
+	}
+	if !strings.Contains(result, "Hello world") {
+		t.Errorf("expected text in output, got: %s", result)
+	}
+	result = FormatPostListItem(post, false)
+	if strings.Contains(result, "> @") {
+		t.Errorf("expected no cursor when cursor=false, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_truncation(t *testing.T) {
+	longText := ""
+	for i := 0; i < 200; i++ {
+		longText += "a"
+	}
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         longText,
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "...") {
+		t.Errorf("expected truncated text, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_newlinesReplaced(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "line1\nline2\nline3",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if strings.Contains(result, "\n") && !strings.HasSuffix(result, "\n") {
+		t.Error("expected newlines in text to be replaced with spaces")
+	}
+}
+
+func TestFormatPostListItem_embeds(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		Embeds:       []string{"https://example.com/img.jpg"},
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "1 attachment") {
+		t.Errorf("expected attachment indicator, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_emptyDisplayName(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "(test.bsky.social)") {
+		t.Errorf("expected handle as fallback display name, got: %s", result)
+	}
+}
+
+func TestFormatPostListItem_shortDate(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		CreatedAt:    "2024-01",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "📅 2024-01") {
+		t.Errorf("expected short date, got: %s", result)
+	}
+}
+
+func TestWriteMoreIndicators(t *testing.T) {
+	var b strings.Builder
+	WriteMoreIndicators(&b, 5, 15, 25)
+	if !strings.Contains(b.String(), "more above") {
+		t.Errorf("expected 'more above' when scrollPos > 0, got: %s", b.String())
+	}
+	if !strings.Contains(b.String(), "more below") {
+		t.Errorf("expected 'more below' when end < total, got: %s", b.String())
+	}
+}
+
+func TestWriteMoreIndicators_noIndicators(t *testing.T) {
+	var b strings.Builder
+	WriteMoreIndicators(&b, 0, 10, 10)
+	if b.Len() > 0 {
+		t.Errorf("expected empty output when at boundaries, got: %s", b.String())
+	}
+}
+
+func TestFormatPostListItem_zeroCounts(t *testing.T) {
+	post := PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}
+	result := FormatPostListItem(post, false)
+	if !strings.Contains(result, "❤️ 0") {
+		t.Errorf("expected zero like count, got: %s", result)
 	}
 }

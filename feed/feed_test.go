@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bluesky-social/indigo/xrpc"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
 	indigobsky "github.com/bluesky-social/indigo/api/bsky"
@@ -341,7 +343,7 @@ func TestUpdate_loadErrorMsg(t *testing.T) {
 
 func TestUpdate_imageRenderedMsg(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
-	m, _ = update(m, imageRenderedMsg{imageRows: 15})
+	m, _ = update(m, attach.RenderedMsg{ImageRows: 15})
 	if m.imageRows != 15 {
 		t.Errorf("expected imageRows 15, got %d", m.imageRows)
 	}
@@ -638,9 +640,9 @@ func TestRenderAttachment_oob(t *testing.T) {
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = 5
 	msg := m.renderAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to render" {
 		t.Errorf("expected 'No image to render', got %q", string(errMsg))
@@ -654,9 +656,9 @@ func TestOpenAttachment_oob(t *testing.T) {
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = -1
 	msg := m.openAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to open" {
 		t.Errorf("expected 'No image to open', got %q", string(errMsg))
@@ -794,6 +796,68 @@ func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
 
 	if m.statusMsg != "No saved posts" {
 		t.Errorf("expected 'No saved posts' after removing last, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_cKey_sendsOpenThreadMsg(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+			URI:      "at://uri/1",
+		},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd == nil {
+		t.Fatal("expected command for c key")
+	}
+	msg := cmd()
+	ot, ok := msg.(OpenThreadMsg)
+	if !ok {
+		t.Fatalf("expected OpenThreadMsg, got %T", msg)
+	}
+	if ot.URI != "at://uri/1" {
+		t.Errorf("expected URI 'at://uri/1', got %q", ot.URI)
+	}
+}
+
+func TestUpdate_cKey_emptyPosts(t *testing.T) {
+	m := NewStaticModel(nil, "Test")
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd != nil {
+		t.Error("expected no command when no posts")
+	}
+}
+
+func TestUpdate_cKey_noURI(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"}},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	if cmd != nil {
+		t.Error("expected no command when post has no URI")
+	}
+}
+
+func TestView_helpBarShowsComments(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Feed")
+	m.loading = false
+	m.cursor = 0
+	v := m.View()
+	if !strings.Contains(v.Content, "[c] comments") {
+		t.Errorf("expected '[c] comments' in help bar, got: %s", v.Content)
 	}
 }
 
