@@ -12,6 +12,7 @@ import (
 	"github.com/Hadidomena/tuiFeed/feed"
 	"github.com/Hadidomena/tuiFeed/follows"
 	"github.com/Hadidomena/tuiFeed/thread"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type sessionState int
@@ -65,13 +66,9 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.cursor = utils.CursorUp(m.cursor)
 		case "down", "j":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			}
+			m.cursor = utils.CursorDown(m.cursor, len(m.choices))
 		case "enter", " ", "space":
 			if m.cursor == 0 {
 				return m, func() tea.Msg { return OpenFeedMsg{} }
@@ -127,13 +124,9 @@ func (m AccountSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			return m, func() tea.Msg { return BackToDashboardMsg{} }
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.cursor = utils.CursorUp(m.cursor)
 		case "down", "j":
-			if m.cursor < len(m.accounts)-1 {
-				m.cursor++
-			}
+			m.cursor = utils.CursorDown(m.cursor, len(m.accounts))
 		case "enter":
 			if len(m.accounts) > 0 {
 				return m, func() tea.Msg {
