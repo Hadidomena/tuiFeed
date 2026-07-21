@@ -176,24 +176,16 @@ func TestGetPostThread_success(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 				Thread: &bsky.FeedGetPostThread_Output_Thread{
 					FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
-						Post: &bsky.FeedDefs_PostView{
-							Uri:       "at://did:plc:test123/app.bsky.feed.post/abc",
-							Cid:       "bafy-test",
-							IndexedAt: "2024-06-01T12:00:00Z",
-							Author: &bsky.ActorDefs_ProfileViewBasic{
-								Did:         "did:plc:test123",
-								Handle:      "test.bsky.social",
-								DisplayName: ptr("Test User"),
-							},
-							Record: &util.LexiconTypeDecoder{
-								Val: &bsky.FeedPost{
-									Text:      "This is a thread post",
-									CreatedAt: "2024-06-01T12:00:00Z",
-								},
-							},
-							LikeCount:  ptr[int64](10),
-							ReplyCount: ptr[int64](3),
-						},
+						Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+							p.Uri = "at://did:plc:test123/app.bsky.feed.post/abc"
+							p.Cid = "bafy-test"
+							p.IndexedAt = "2024-06-01T12:00:00Z"
+							p.Author.Did = "did:plc:test123"
+							p.Record.Val.(*bsky.FeedPost).Text = "This is a thread post"
+							p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+							p.LikeCount = ptr[int64](10)
+							p.ReplyCount = ptr[int64](3)
+						}),
 						Parent: &bsky.FeedDefs_ThreadViewPost_Parent{
 							FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
 								Post: &bsky.FeedDefs_PostView{
@@ -568,24 +560,16 @@ func TestGetThreadByURI_success(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
 				FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
-					Post: &bsky.FeedDefs_PostView{
-						Uri:       "at://did:plc:test/app.bsky.feed.post/abc",
-						Cid:       "bafy-test",
-						IndexedAt: "2024-06-01T12:00:00Z",
-						Author: &bsky.ActorDefs_ProfileViewBasic{
-							Did:         "did:plc:test",
-							Handle:      "test.bsky.social",
-							DisplayName: ptr("Test User"),
-						},
-						Record: &util.LexiconTypeDecoder{
-							Val: &bsky.FeedPost{
-								Text:      "Thread root",
-								CreatedAt: "2024-06-01T12:00:00Z",
-							},
-						},
-						LikeCount:  ptr[int64](10),
-						ReplyCount: ptr[int64](2),
-					},
+					Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+						p.Uri = "at://did:plc:test/app.bsky.feed.post/abc"
+						p.Cid = "bafy-test"
+						p.IndexedAt = "2024-06-01T12:00:00Z"
+						p.Author.Did = "did:plc:test"
+						p.Record.Val.(*bsky.FeedPost).Text = "Thread root"
+						p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						p.LikeCount = ptr[int64](10)
+						p.ReplyCount = ptr[int64](2)
+					}),
 					Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
 						{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
 							Post: &bsky.FeedDefs_PostView{
@@ -714,24 +698,13 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 				Cursor: ptr("next-cursor-abc"),
 				Feed: []*bsky.FeedDefs_FeedViewPost{
 					{
-						Post: &bsky.FeedDefs_PostView{
-							Uri:       "at://did:plc:test123/app.bsky.feed.post/1",
-							Cid:       "bafy-test",
-							IndexedAt: "2024-06-01T12:00:00Z",
-							Author: &bsky.ActorDefs_ProfileViewBasic{
-								Did:         "did:plc:test123",
-								Handle:      "test.bsky.social",
-								DisplayName: ptr("Test User"),
-							},
-							Record: &util.LexiconTypeDecoder{
-								Val: &bsky.FeedPost{
-									Text:      "Hello world",
-									CreatedAt: "2024-06-01T12:00:00Z",
-								},
-							},
-							LikeCount:  ptr[int64](42),
-							ReplyCount: ptr[int64](7),
-						},
+						Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+							p.Uri = "at://did:plc:test123/app.bsky.feed.post/1"
+							p.Cid = "bafy-test"
+							p.IndexedAt = "2024-06-01T12:00:00Z"
+							p.Author.Did = "did:plc:test123"
+							p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						}),
 					},
 				},
 			})
@@ -917,24 +890,16 @@ func TestGetAuthorFeed_success(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 			Feed: []*bsky.FeedDefs_FeedViewPost{
 				{
-					Post: &bsky.FeedDefs_PostView{
-						Uri:       "at://did:plc:test/app.bsky.feed.post/1",
-						Cid:       "bafy-test",
-						IndexedAt: "2024-06-01T12:00:00Z",
-						Author: &bsky.ActorDefs_ProfileViewBasic{
-							Did:         "did:plc:test",
-							Handle:      "test.bsky.social",
-							DisplayName: ptr("Test User"),
-						},
-						Record: &util.LexiconTypeDecoder{
-							Val: &bsky.FeedPost{
-								Text:      "Hello from feed",
-								CreatedAt: "2024-06-01T12:00:00Z",
-							},
-						},
-						LikeCount:  ptr[int64](10),
-						ReplyCount: ptr[int64](2),
-					},
+					Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+						p.Uri = "at://did:plc:test/app.bsky.feed.post/1"
+						p.Cid = "bafy-test"
+						p.IndexedAt = "2024-06-01T12:00:00Z"
+						p.Author.Did = "did:plc:test"
+						p.Record.Val.(*bsky.FeedPost).Text = "Hello from feed"
+						p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						p.LikeCount = ptr[int64](10)
+						p.ReplyCount = ptr[int64](2)
+					}),
 				},
 			},
 		})
