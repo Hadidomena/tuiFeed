@@ -12,6 +12,10 @@ import (
 	"github.com/Hadidomena/tuiFeed/thread"
 )
 
+func newConfig(follows []string, checks map[string]string) *config.Config {
+	return &config.Config{Follows: follows, LastChecks: checks}
+}
+
 func TestNewDashboardModel(t *testing.T) {
 	m := NewDashboardModel()
 	if len(m.choices) != 4 {
@@ -22,11 +26,33 @@ func TestNewDashboardModel(t *testing.T) {
 	}
 }
 
-func TestDashboardInit(t *testing.T) {
-	m := NewDashboardModel()
-	cmd := m.Init()
-	if cmd != nil {
-		t.Error("expected nil command")
+func TestNewAccountSelectModel(t *testing.T) {
+	cfg := newConfig([]string{"a.bsky.social", "b.bsky.social"}, map[string]string{"a.bsky.social": "2024-01-15T10:00:00Z"})
+	m := NewAccountSelectModel(cfg)
+	if len(m.accounts) != 2 {
+		t.Errorf("expected 2 accounts, got %d", len(m.accounts))
+	}
+	if m.cursor != 0 {
+		t.Errorf("expected cursor 0, got %d", m.cursor)
+	}
+}
+
+func TestInit_nilCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		m    tea.Model
+	}{
+		{"dashboard", NewDashboardModel()},
+		{"accountSelect", NewAccountSelectModel(&config.Config{})},
+		{"loading", LoadingModel{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.m.Init()
+			if cmd != nil {
+				t.Error("expected nil command")
+			}
+		})
 	}
 }
 
@@ -38,55 +64,40 @@ func TestDashboardUpdate_quit(t *testing.T) {
 	}
 }
 
-func TestDashboardUpdate_upK(t *testing.T) {
-	m := NewDashboardModel()
-	m.cursor = 2
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
-	if m.cursor != 1 {
-		t.Errorf("expected cursor 1, got %d", m.cursor)
-	}
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
-	if m.cursor != 0 {
-		t.Errorf("expected cursor 0, got %d", m.cursor)
-	}
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
-	if m.cursor != 0 {
-		t.Errorf("expected cursor still 0, got %d", m.cursor)
-	}
-}
-
-func TestDashboardUpdate_downJ(t *testing.T) {
-	m := NewDashboardModel()
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
-	if m.cursor != 1 {
-		t.Errorf("expected cursor 1, got %d", m.cursor)
-	}
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
-	if m.cursor != 2 {
-		t.Errorf("expected cursor 2, got %d", m.cursor)
-	}
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
-	if m.cursor != 3 {
-		t.Errorf("expected cursor 3, got %d", m.cursor)
-	}
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
-	if m.cursor != 3 {
-		t.Errorf("expected cursor still 3, got %d", m.cursor)
-	}
+func TestDashboardUpdate_cursorNavigation(t *testing.T) {
+	t.Run("up", func(t *testing.T) {
+		m := NewDashboardModel()
+		m.cursor = 2
+		for _, expected := range []int{1, 0, 0} {
+			m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
+			if m.cursor != expected {
+				t.Errorf("expected cursor %d, got %d", expected, m.cursor)
+			}
+		}
+	})
+	t.Run("down", func(t *testing.T) {
+		m := NewDashboardModel()
+		for _, expected := range []int{1, 2, 3, 3} {
+			m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
+			if m.cursor != expected {
+				t.Errorf("expected cursor %d, got %d", expected, m.cursor)
+			}
+		}
+	})
 }
 
 func TestDashboardUpdate_enter(t *testing.T) {
+	type want struct {
+		feed, sl, mng, save bool
+	}
 	tests := []struct {
-		cursor   int
-		wantFeed bool
-		wantSL   bool
-		wantMng  bool
-		wantSave bool
+		cursor int
+		want   want
 	}{
-		{0, true, false, false, false},
-		{1, false, true, false, false},
-		{2, false, false, true, false},
-		{3, false, false, false, true},
+		{0, want{feed: true}},
+		{1, want{sl: true}},
+		{2, want{mng: true}},
+		{3, want{save: true}},
 	}
 	for _, tt := range tests {
 		m := NewDashboardModel()
@@ -97,19 +108,19 @@ func TestDashboardUpdate_enter(t *testing.T) {
 		}
 		msg := cmd()
 		switch {
-		case tt.wantFeed:
+		case tt.want.feed:
 			if _, ok := msg.(OpenFeedMsg); !ok {
 				t.Errorf("cursor %d: expected OpenFeedMsg, got %T", tt.cursor, msg)
 			}
-		case tt.wantSL:
+		case tt.want.sl:
 			if _, ok := msg.(OpenAccountSelectMsg); !ok {
 				t.Errorf("cursor %d: expected OpenAccountSelectMsg, got %T", tt.cursor, msg)
 			}
-		case tt.wantMng:
+		case tt.want.mng:
 			if _, ok := msg.(OpenFollowsMsg); !ok {
 				t.Errorf("cursor %d: expected OpenFollowsMsg, got %T", tt.cursor, msg)
 			}
-		case tt.wantSave:
+		case tt.want.save:
 			if _, ok := msg.(OpenSavedPostsMsg); !ok {
 				t.Errorf("cursor %d: expected OpenSavedPostsMsg, got %T", tt.cursor, msg)
 			}
@@ -117,40 +128,29 @@ func TestDashboardUpdate_enter(t *testing.T) {
 	}
 }
 
-func TestDashboardView(t *testing.T) {
-	m := NewDashboardModel()
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
+func TestView_nonEmpty(t *testing.T) {
+	tests := []struct {
+		name string
+		m    tea.Model
+	}{
+		{"dashboard", NewDashboardModel()},
+		{"accountSelect", NewAccountSelectModel(newConfig([]string{"a.bsky.social"}, map[string]string{"a.bsky.social": "2024-01-15T10:00:00Z"}))},
+		{"accountSelectEmpty", NewAccountSelectModel(&config.Config{})},
+		{"accountSelectNoDate", NewAccountSelectModel(newConfig([]string{"a.bsky.social"}, map[string]string{}))},
+		{"loading", LoadingModel{message: "Fetching posts..."}},
 	}
-}
-
-func TestNewAccountSelectModel(t *testing.T) {
-	cfg := &config.Config{
-		Follows:    []string{"a.bsky.social", "b.bsky.social"},
-		LastChecks: map[string]string{"a.bsky.social": "2024-01-15T10:00:00Z"},
-	}
-	m := NewAccountSelectModel(cfg)
-	if len(m.accounts) != 2 {
-		t.Errorf("expected 2 accounts, got %d", len(m.accounts))
-	}
-	if m.cursor != 0 {
-		t.Errorf("expected cursor 0, got %d", m.cursor)
-	}
-}
-
-func TestAccountSelectInit(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewAccountSelectModel(cfg)
-	cmd := m.Init()
-	if cmd != nil {
-		t.Error("expected nil command")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := tt.m.View()
+			if v.Content == "" {
+				t.Error("expected non-empty view")
+			}
+		})
 	}
 }
 
 func TestAccountSelectUpdate_esc(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewAccountSelectModel(cfg)
+	m := NewAccountSelectModel(&config.Config{})
 	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
 	if cmd == nil {
 		t.Fatal("expected BackToDashboardMsg for esc")
@@ -162,7 +162,7 @@ func TestAccountSelectUpdate_esc(t *testing.T) {
 }
 
 func TestAccountSelectUpdate_upDown(t *testing.T) {
-	cfg := &config.Config{Follows: []string{"a.bsky.social", "b.bsky.social", "c.bsky.social"}}
+	cfg := newConfig([]string{"a.bsky.social", "b.bsky.social", "c.bsky.social"}, nil)
 	m := NewAccountSelectModel(cfg)
 	m.cursor = 2
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
@@ -180,7 +180,7 @@ func TestAccountSelectUpdate_upDown(t *testing.T) {
 }
 
 func TestAccountSelectUpdate_enter(t *testing.T) {
-	cfg := &config.Config{Follows: []string{"a.bsky.social"}}
+	cfg := newConfig([]string{"a.bsky.social"}, nil)
 	m := NewAccountSelectModel(cfg)
 	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	if cmd == nil {
@@ -197,82 +197,32 @@ func TestAccountSelectUpdate_enter(t *testing.T) {
 }
 
 func TestAccountSelectUpdate_enterEmpty(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewAccountSelectModel(cfg)
+	m := NewAccountSelectModel(&config.Config{})
 	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	if cmd != nil {
 		t.Error("expected nil command for enter on empty list")
 	}
 }
 
-func TestAccountSelectView(t *testing.T) {
-	cfg := &config.Config{
-		Follows:    []string{"a.bsky.social"},
-		LastChecks: map[string]string{"a.bsky.social": "2024-01-15T10:00:00Z"},
+func TestLoadingUpdate_returnsSelf(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  tea.Msg
+	}{
+		{"keyPress", testutil.KeyRune('q')},
+		{"nonKey", struct{ tea.Msg }{}},
 	}
-	m := NewAccountSelectModel(cfg)
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
-	}
-}
-
-func TestAccountSelectView_empty(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewAccountSelectModel(cfg)
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
-	}
-}
-
-func TestAccountSelectView_noDate(t *testing.T) {
-	cfg := &config.Config{
-		Follows:    []string{"a.bsky.social"},
-		LastChecks: map[string]string{},
-	}
-	m := NewAccountSelectModel(cfg)
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
-	}
-}
-
-func TestLoadingInit(t *testing.T) {
-	m := LoadingModel{}
-	cmd := m.Init()
-	if cmd != nil {
-		t.Error("expected nil command")
-	}
-}
-
-func TestLoadingUpdate(t *testing.T) {
-	m := LoadingModel{}
-	newModel, cmd := m.Update(testutil.KeyRune('q'))
-	if cmd != nil {
-		t.Error("expected nil command")
-	}
-	if _, ok := newModel.(LoadingModel); !ok {
-		t.Error("expected LoadingModel")
-	}
-}
-
-func TestLoadingUpdate_nonKey(t *testing.T) {
-	m := LoadingModel{}
-	newModel, cmd := m.Update(struct{ tea.Msg }{})
-	if cmd != nil {
-		t.Error("expected nil command for non-key message")
-	}
-	if _, ok := newModel.(LoadingModel); !ok {
-		t.Error("expected LoadingModel")
-	}
-}
-
-func TestLoadingView(t *testing.T) {
-	m := LoadingModel{message: "Fetching posts..."}
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := LoadingModel{}
+			newModel, cmd := m.Update(tt.msg)
+			if cmd != nil {
+				t.Error("expected nil command")
+			}
+			if _, ok := newModel.(LoadingModel); !ok {
+				t.Error("expected LoadingModel")
+			}
+		})
 	}
 }
 
@@ -284,7 +234,7 @@ func TestUpdateSubModel(t *testing.T) {
 	}
 }
 
-func TestMainModel_OpenThreadMsg_transitions(t *testing.T) {
+func TestMainModel_OpenThreadMsg(t *testing.T) {
 	m := NewMainModel()
 	result, cmd := m.Update(feed.OpenThreadMsg{URI: "at://test/uri"})
 	mm := result.(MainModel)
@@ -295,12 +245,6 @@ func TestMainModel_OpenThreadMsg_transitions(t *testing.T) {
 	if cmd == nil {
 		t.Error("expected non-nil command from thread.Init()")
 	}
-}
-
-func TestMainModel_OpenThreadMsg_showsLoadingView(t *testing.T) {
-	m := NewMainModel()
-	result, _ := m.Update(feed.OpenThreadMsg{URI: "at://test/uri"})
-	mm := result.(MainModel)
 
 	v := mm.View()
 	if !strings.Contains(v.Content, "Loading comments") {
@@ -318,30 +262,16 @@ func TestMainModel_ThreadBackMsg_returnsToFeed(t *testing.T) {
 	}
 }
 
-func TestMainModel_OpenThreadMsg_viewDispatch(t *testing.T) {
-	m := NewMainModel()
-	mm, _ := testutil.UpdateModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
-
-	v := mm.View()
-	if !strings.Contains(v.Content, "Comments") && !strings.Contains(v.Content, "Loading comments") {
-		t.Errorf("expected thread-related view content, got: %s", v.Content)
-	}
-}
-
 func TestMainModel_OpenThreadMsg_fromDifferentStates(t *testing.T) {
 	m := NewMainModel()
-	// Try from dashboard (initial state)
 	mm, _ := testutil.UpdateModel(m, feed.OpenThreadMsg{URI: "at://test/uri"})
 	if mm.state != showThreadView {
 		t.Errorf("expected showThreadView from dashboard, got %d", mm.state)
 	}
 
-	// Go back
 	mm, _ = testutil.UpdateModel(mm, thread.BackMsg{})
-
-	// Try from feed state
 	mm, _ = testutil.UpdateModel(mm, feed.OpenThreadMsg{URI: "at://test/uri2"})
 	if mm.state != showThreadView {
-		t.Errorf("expected showThreadView from feed, got %d", mm.state)
+		t.Errorf("expected showThreadView from feed after back, got %d", mm.state)
 	}
 }
