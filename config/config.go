@@ -100,6 +100,13 @@ func Update(fn func(*Config)) error {
 	return cfg.Save()
 }
 
+func ApplyUpdateAndReload(fn func(*Config)) (*Config, error) {
+	if err := Update(fn); err != nil {
+		return nil, err
+	}
+	return Load()
+}
+
 func (c *Config) AddFollow(handle string) {
 	if slices.Contains(c.Follows, handle) {
 		return
