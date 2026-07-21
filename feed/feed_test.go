@@ -17,10 +17,43 @@ import (
 	"github.com/bluesky-social/indigo/lex/util"
 )
 
-func TestNewStaticModel(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
+func barePost() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}}}
+}
+
+func postWithURI() []bsk.FeedItem {
+	return []bsk.FeedItem{{
+		PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+		URI:      "at://uri/1",
+	}}
+}
+
+func postWithTwoEmbeds() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}}}
+}
+
+func postWithOneEmbed() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}}}
+}
+
+func viewPost() bsk.FeedItem {
+	return bsk.FeedItem{PostInfo: bsk.PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}}
+}
+
+func nViewPosts(n int) []bsk.FeedItem {
+	posts := make([]bsk.FeedItem, n)
+	for i := range posts {
+		posts[i] = viewPost()
 	}
+	return posts
+}
+
+func TestNewStaticModel(t *testing.T) {
+	posts := barePost()
 	m := NewStaticModel(posts, "My Title")
 	if m.title != "My Title" {
 		t.Errorf("expected 'My Title', got %q", m.title)
@@ -50,9 +83,7 @@ func TestInit_withClient(t *testing.T) {
 }
 
 func TestUpdate_quit(t *testing.T) {
-	m := NewStaticModel([]bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}, "Test")
+	m := NewStaticModel(barePost(), "Test")
 	_, cmd := m.Update(testutil.KeyRune('q'))
 	if cmd == nil {
 		t.Fatal("expected Quit command for 'q'")
@@ -60,9 +91,7 @@ func TestUpdate_quit(t *testing.T) {
 }
 
 func TestUpdate_ctrlC(t *testing.T) {
-	m := NewStaticModel([]bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}, "Test")
+	m := NewStaticModel(barePost(), "Test")
 
 	msg := testutil.KeyPress("", 'c', tea.ModCtrl)
 	_, cmd := m.Update(msg)
@@ -139,9 +168,7 @@ func TestUpdate_scrollWindow(t *testing.T) {
 }
 
 func TestUpdate_left(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 1
@@ -155,9 +182,7 @@ func TestUpdate_left(t *testing.T) {
 }
 
 func TestUpdate_leftAtZero(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 0
@@ -168,9 +193,7 @@ func TestUpdate_leftAtZero(t *testing.T) {
 }
 
 func TestUpdate_right(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 0
@@ -184,9 +207,7 @@ func TestUpdate_right(t *testing.T) {
 }
 
 func TestUpdate_rightAtEnd(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 1
@@ -197,9 +218,7 @@ func TestUpdate_rightAtEnd(t *testing.T) {
 }
 
 func TestUpdate_oKey(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('o'))
 	if cmd == nil {
@@ -211,9 +230,7 @@ func TestUpdate_oKey(t *testing.T) {
 }
 
 func TestUpdate_oKeyNoEmbeds(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}
+	posts := barePost()
 	m := NewStaticModel(posts, "Test")
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('o'))
 	if m.statusMsg == "Opening image externally..." {
@@ -222,9 +239,7 @@ func TestUpdate_oKeyNoEmbeds(t *testing.T) {
 }
 
 func TestUpdate_leftH(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 1
@@ -238,9 +253,7 @@ func TestUpdate_leftH(t *testing.T) {
 }
 
 func TestUpdate_rightL(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 0
@@ -254,9 +267,7 @@ func TestUpdate_rightL(t *testing.T) {
 }
 
 func TestUpdate_aKey(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('a'))
 	if !m.hasRendered {
@@ -463,16 +474,7 @@ func TestView_cursorPastEnd(t *testing.T) {
 }
 
 func TestView_paginationAbove(t *testing.T) {
-	posts := make([]bsk.FeedItem, 20)
-	for i := range posts {
-		posts[i] = bsk.FeedItem{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-			},
-		}
-	}
+	posts := nViewPosts(20)
 	m := NewStaticModel(posts, "Feed")
 	m.loading = false
 	m.cursor = 12
@@ -484,16 +486,7 @@ func TestView_paginationAbove(t *testing.T) {
 }
 
 func TestView_paginationBelow(t *testing.T) {
-	posts := make([]bsk.FeedItem, 20)
-	for i := range posts {
-		posts[i] = bsk.FeedItem{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-			},
-		}
-	}
+	posts := nViewPosts(20)
 	m := NewStaticModel(posts, "Feed")
 	m.loading = false
 	m.cursor = 0
@@ -625,9 +618,7 @@ func TestLoadPosts_noFollows(t *testing.T) {
 }
 
 func TestRenderAttachment_oob(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = 5
 	msg := m.renderAttachment()
@@ -641,9 +632,7 @@ func TestRenderAttachment_oob(t *testing.T) {
 }
 
 func TestOpenAttachment_oob(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = -1
 	msg := m.openAttachment()
@@ -658,12 +647,7 @@ func TestOpenAttachment_oob(t *testing.T) {
 
 func TestUpdate_sKey_save(t *testing.T) {
 	cfg := testutil.SetupTestConfig(t)
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
@@ -681,12 +665,7 @@ func TestUpdate_sKey_unsave(t *testing.T) {
 	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
@@ -701,12 +680,7 @@ func TestUpdate_sKey_unsave(t *testing.T) {
 }
 
 func TestUpdate_sKey_noConfig(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
@@ -733,12 +707,7 @@ func TestUpdate_sKey_removeFromSaved(t *testing.T) {
 	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
@@ -760,12 +729,7 @@ func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
 	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
@@ -777,12 +741,7 @@ func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
 }
 
 func TestUpdate_cKey_sendsOpenThreadMsg(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cursor = 0
 	_, cmd := m.Update(testutil.KeyRune('c'))
@@ -883,12 +842,7 @@ func TestUpdate_sKey_emptyPosts(t *testing.T) {
 }
 
 func TestUpdate_sKey_cursorPastEnd(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	cfg := &config.Config{}
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
