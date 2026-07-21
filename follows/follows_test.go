@@ -19,12 +19,18 @@ func setupTestConfig(t *testing.T) {
 	}
 }
 
-func TestInit(t *testing.T) {
+func setupModel(t *testing.T) Model {
+	t.Helper()
 	setupTestConfig(t)
 	m, err := NewModel()
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
 	}
+	return m
+}
+
+func TestInit(t *testing.T) {
+	m := setupModel(t)
 	cmd := m.Init()
 	if cmd != nil {
 		t.Error("expected nil command from Init")
@@ -32,11 +38,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestUpdate_nonKeyMsg(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	_, cmd := m.Update(struct{ tea.Msg }{})
 	if cmd != nil {
 		t.Error("expected nil command for non-key message")
@@ -44,11 +46,7 @@ func TestUpdate_nonKeyMsg(t *testing.T) {
 }
 
 func TestUpdateList_esc(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
 	if cmd == nil {
 		t.Fatal("expected BackMsg command for esc")
@@ -60,11 +58,7 @@ func TestUpdateList_esc(t *testing.T) {
 }
 
 func TestUpdateList_upK(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.cursor = 1
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
@@ -77,11 +71,7 @@ func TestUpdateList_upK(t *testing.T) {
 }
 
 func TestUpdateList_downJ(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
@@ -93,11 +83,7 @@ func TestUpdateList_downJ(t *testing.T) {
 }
 
 func TestUpdateList_a(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('a'))
 	if m.mode != modeInput {
 		t.Errorf("expected modeInput, got %v", m.mode)
@@ -108,11 +94,7 @@ func TestUpdateList_a(t *testing.T) {
 }
 
 func TestUpdateList_d(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('d'))
 	if len(m.cfg.Follows) != 1 {
 		t.Errorf("expected 1 follow after delete, got %d", len(m.cfg.Follows))
@@ -123,11 +105,7 @@ func TestUpdateList_d(t *testing.T) {
 }
 
 func TestUpdateList_dAtEnd(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.cursor = 1
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('d'))
 	if m.cursor != 0 {
@@ -153,11 +131,7 @@ func TestUpdateList_dEmpty(t *testing.T) {
 }
 
 func TestUpdateInput_esc(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "hello"
 	m.statusMsg = "old"
@@ -174,11 +148,7 @@ func TestUpdateInput_esc(t *testing.T) {
 }
 
 func TestUpdateInput_enterEmpty(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "   "
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyEnter))
@@ -191,11 +161,7 @@ func TestUpdateInput_enterEmpty(t *testing.T) {
 }
 
 func TestUpdateInput_enterValid(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "@testuser.bsky.social"
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyEnter))
@@ -211,11 +177,7 @@ func TestUpdateInput_enterValid(t *testing.T) {
 }
 
 func TestUpdateInput_backspace(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "hello"
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyBackspace))
@@ -236,11 +198,7 @@ func TestUpdateInput_backspace(t *testing.T) {
 }
 
 func TestUpdateInput_text(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m, _ = testutil.UpdateModel(m, testutil.KeyRune('h'))
 	if m.input != "h" {
@@ -253,11 +211,7 @@ func TestUpdateInput_text(t *testing.T) {
 }
 
 func TestView_listMode(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	v := m.View()
 	if v.Content == "" {
 		t.Error("expected non-empty view")
@@ -265,11 +219,7 @@ func TestView_listMode(t *testing.T) {
 }
 
 func TestView_listModeWithCursor(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.cursor = 1
 	v := m.View()
 	if v.Content == "" {
@@ -278,11 +228,7 @@ func TestView_listModeWithCursor(t *testing.T) {
 }
 
 func TestView_inputMode(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "test"
 	v := m.View()
@@ -306,11 +252,7 @@ func TestView_emptyList(t *testing.T) {
 }
 
 func TestView_withStatus(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.statusMsg = "Something happened"
 	v := m.View()
 	if v.Content == "" {
@@ -331,11 +273,7 @@ func TestNewModel_loadError(t *testing.T) {
 }
 
 func TestUpdateList_dSaveError(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	orig := os.Getenv("XDG_CONFIG_HOME")
 	defer os.Setenv("XDG_CONFIG_HOME", orig)
 	tmp := t.TempDir()
@@ -351,11 +289,7 @@ func TestUpdateList_dSaveError(t *testing.T) {
 }
 
 func TestUpdateInput_enterSaveError(t *testing.T) {
-	setupTestConfig(t)
-	m, err := NewModel()
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
+	m := setupModel(t)
 	m.mode = modeInput
 	m.input = "newuser.bsky.social"
 
