@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+func withTempConfigHOME(t *testing.T) string {
+	t.Helper()
+	tmp := t.TempDir()
+	orig := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Cleanup(func() { os.Setenv("XDG_CONFIG_HOME", orig) })
+	return tmp
+}
+
 func TestAddFollow(t *testing.T) {
 	cfg := &Config{}
 	cfg.AddFollow("alice.bsky.social")
@@ -44,10 +53,7 @@ func TestRemoveFollowOutOfBounds(t *testing.T) {
 }
 
 func TestSaveAndLoad(t *testing.T) {
-	tmp := t.TempDir()
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	tmp := withTempConfigHOME(t)
 
 	cfg := &Config{Follows: []string{"test.bsky.social"}}
 	if err := cfg.Save(); err != nil {
@@ -69,10 +75,7 @@ func TestSaveAndLoad(t *testing.T) {
 }
 
 func TestLoadMissing(t *testing.T) {
-	tmp := t.TempDir()
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	withTempConfigHOME(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -129,10 +132,7 @@ func TestRemoveFollow_nilLastChecks(t *testing.T) {
 }
 
 func TestLoad_invalidJSON(t *testing.T) {
-	tmp := t.TempDir()
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	tmp := withTempConfigHOME(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, "tuiFeed"), 0o755); err != nil {
 		t.Fatal(err)
@@ -148,10 +148,7 @@ func TestLoad_invalidJSON(t *testing.T) {
 }
 
 func TestLoad_readError(t *testing.T) {
-	tmp := t.TempDir()
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	tmp := withTempConfigHOME(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, "tuiFeed"), 0o755); err != nil {
 		t.Fatal(err)
@@ -167,10 +164,7 @@ func TestLoad_readError(t *testing.T) {
 }
 
 func TestSave_mkdirError(t *testing.T) {
-	tmp := t.TempDir()
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	tmp := withTempConfigHOME(t)
 
 	if err := os.WriteFile(filepath.Join(tmp, "tuiFeed"), nil, 0o644); err != nil {
 		t.Fatal(err)
