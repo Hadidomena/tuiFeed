@@ -75,6 +75,23 @@ func writeResolveHandle(w http.ResponseWriter) {
 	})
 }
 
+func withImageEnv(t *testing.T, kittyVal, termProgVal, termVal string, fn func()) {
+	t.Helper()
+	orig1 := os.Getenv("KITTY_WINDOW_ID")
+	orig2 := os.Getenv("TERM_PROGRAM")
+	orig3 := os.Getenv("TERM")
+	t.Cleanup(func() {
+		os.Setenv("KITTY_WINDOW_ID", orig1)
+		os.Setenv("TERM_PROGRAM", orig2)
+		os.Setenv("TERM", orig3)
+	})
+	detectedProto = -1
+	os.Setenv("KITTY_WINDOW_ID", kittyVal)
+	os.Setenv("TERM_PROGRAM", termProgVal)
+	os.Setenv("TERM", termVal)
+	fn()
+}
+
 func TestExtractPostInfo_basic(t *testing.T) {
 	post := makePostView(func(p *bsky.FeedDefs_PostView) {
 		p.IndexedAt = "2024-01-15T10:00:01Z"
@@ -987,141 +1004,65 @@ func TestGetAuthorFeed_error(t *testing.T) {
 }
 
 func TestDetectImageProtocol_kittyWindowId(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "")
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "1234")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "1234", "", "", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_wezterm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "WezTerm")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "", "WezTerm", "xterm-256color", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_kittyTerm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-kitty")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "", "", "xterm-kitty", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_sixelDefault(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoSixel {
-		t.Errorf("expected ProtoSixel, got %v", proto)
-	}
+	withImageEnv(t, "", "", "xterm-256color", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoSixel {
+			t.Errorf("expected ProtoSixel, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_cached(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = ProtoKitty
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected cached ProtoKitty, got %v", proto)
-	}
-	detectedProto = -1
+	withImageEnv(t, "", "", "xterm-256color", func() {
+		detectedProto = ProtoKitty
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected cached ProtoKitty, got %v", proto)
+		}
+		detectedProto = -1
+	})
 }
 
 func TestDetectImageProtocol_iterm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "iTerm.app")
-	os.Setenv("TERM", "")
-	proto := DetectImageProtocol()
-	if proto != ProtoSixel {
-		t.Errorf("expected ProtoSixel for iTerm, got %v", proto)
-	}
+	withImageEnv(t, "", "iTerm.app", "", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoSixel {
+			t.Errorf("expected ProtoSixel for iTerm, got %v", proto)
+		}
+	})
 }
 
 func TestClearImages(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "")
-	ClearImages()
+	withImageEnv(t, "", "", "", func() {
+		ClearImages()
+	})
 }
 
 func TestRenderImage_downloadError(t *testing.T) {
