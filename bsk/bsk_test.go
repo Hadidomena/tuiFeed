@@ -51,6 +51,30 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *x
 	return server, client
 }
 
+type route struct {
+	path    string
+	handler http.HandlerFunc
+}
+
+func newJSONRouter(routes ...route) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		for _, rt := range routes {
+			if strings.Contains(r.URL.Path, rt.path) {
+				rt.handler(w, r)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func writeResolveHandle(w http.ResponseWriter) {
+	_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
+		Did: "did:plc:test123",
+	})
+}
+
 func TestExtractPostInfo_basic(t *testing.T) {
 	post := makePostView(func(p *bsky.FeedDefs_PostView) {
 		p.IndexedAt = "2024-01-15T10:00:01Z"
@@ -127,14 +151,11 @@ func TestExtractPostInfo_noRecord(t *testing.T) {
 }
 
 func TestGetPostThread_success(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getPostThread"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getPostThread", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 				Thread: &bsky.FeedGetPostThread_Output_Thread{
 					FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
@@ -195,10 +216,8 @@ func TestGetPostThread_success(t *testing.T) {
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	thread, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -238,17 +257,11 @@ func TestGetPostThread_resolveError(t *testing.T) {
 }
 
 func TestGetPostThread_threadError(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+	))
 	_, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err == nil {
 		t.Fatal("expected error for failed thread fetch")
@@ -675,14 +688,11 @@ func TestGetPostThread_invalidURL(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_success(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: ptr("next-cursor-abc"),
 				Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -708,10 +718,8 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -742,21 +750,16 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Feed: []*bsky.FeedDefs_FeedViewPost{},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -771,14 +774,11 @@ func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: nil,
 				Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -801,10 +801,8 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "some-cursor", 50)
 	if err != nil {
@@ -819,18 +817,15 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle") {
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"error":   "HandleNotFound",
 				"message": "handle not found",
 			})
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "nonexistent.bsky.social", "", 50)
 	if err == nil {
@@ -839,23 +834,18 @@ func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_feedError(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"error":   "InternalError",
 				"message": "something went wrong",
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err == nil {
@@ -1225,14 +1215,11 @@ func TestResizeToFit_heightConstrained(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: ptr("next-cursor"),
 				Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -1257,10 +1244,8 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 					{Post: nil},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
