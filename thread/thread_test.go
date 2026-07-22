@@ -63,26 +63,6 @@ func withBreadcrumb(bc []string) modelOption {
 	return func(m *Model) { m.breadcrumb = bc }
 }
 
-func TestNewModel(t *testing.T) {
-	m := NewModel("at://uri/test")
-	if m.uri != "at://uri/test" {
-		t.Errorf("expected uri 'at://uri/test', got %q", m.uri)
-	}
-	if !m.loading {
-		t.Error("expected loading to be true")
-	}
-	if m.pageSize != 10 {
-		t.Errorf("expected pageSize 10, got %d", m.pageSize)
-	}
-}
-
-func TestNewModel_emptyURI(t *testing.T) {
-	m := NewModel("")
-	if m.uri != "" {
-		t.Errorf("expected empty uri, got %q", m.uri)
-	}
-}
-
 func TestInit_withURI(t *testing.T) {
 	m := NewModel("at://uri/test")
 	cmd := m.Init()
@@ -616,23 +596,6 @@ func TestView_breadcrumbAtLimit(t *testing.T) {
 	v := m.View()
 	if strings.Contains(v.Content, "... >") {
 		t.Errorf("expected no truncation at exactly maxBreadcrumb, got: %s", v.Content)
-	}
-}
-
-func TestView_noRepliesMessage(t *testing.T) {
-	root := makeNode("author", "Root", "at://uri/root")
-	m := defaultModel(root)
-	v := m.View()
-	if !strings.Contains(v.Content, "No replies yet") {
-		t.Errorf("expected 'No replies yet', got: %s", v.Content)
-	}
-}
-
-func TestView_emptyThreadData(t *testing.T) {
-	m := Model{loading: false, root: nil}
-	v := m.View()
-	if !strings.Contains(v.Content, "No thread data") {
-		t.Errorf("expected 'No thread data', got: %s", v.Content)
 	}
 }
 

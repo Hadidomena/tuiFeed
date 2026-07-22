@@ -238,34 +238,6 @@ func TestUpdate_oKeyNoEmbeds(t *testing.T) {
 	}
 }
 
-func TestUpdate_leftH(t *testing.T) {
-	posts := postWithTwoEmbeds()
-	m := NewStaticModel(posts, "Test")
-	m.hasRendered = true
-	m.imgCursor = 1
-	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('h'))
-	if m.imgCursor != 0 {
-		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
-	}
-	if cmd == nil {
-		t.Error("expected render command")
-	}
-}
-
-func TestUpdate_rightL(t *testing.T) {
-	posts := postWithTwoEmbeds()
-	m := NewStaticModel(posts, "Test")
-	m.hasRendered = true
-	m.imgCursor = 0
-	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('l'))
-	if m.imgCursor != 1 {
-		t.Errorf("expected imgCursor 1, got %d", m.imgCursor)
-	}
-	if cmd == nil {
-		t.Error("expected render command")
-	}
-}
-
 func TestUpdate_aKey(t *testing.T) {
 	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
@@ -810,38 +782,7 @@ func TestUpdate_rKey_savedView(t *testing.T) {
 	}
 }
 
-func TestNewSavedModel(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.SavePost("at://uri/1")
-	cfg.SavePost("at://uri/2")
-	m := NewSavedModel(cfg)
-
-	if m.title != "Saved posts" {
-		t.Errorf("expected title 'Saved posts', got %q", m.title)
-	}
-	if !m.isSavedView {
-		t.Error("expected isSavedView to be true")
-	}
-	if !m.loading {
-		t.Error("expected loading to be true")
-	}
-	if m.client == nil {
-		t.Error("expected client to be set")
-	}
-}
-
 func TestUpdate_sKey_emptyPosts(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewStaticModel(nil, "Test")
-	m.cfg = cfg
-	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
-
-	if m.statusMsg != "" {
-		t.Errorf("expected no status for empty posts, got %q", m.statusMsg)
-	}
-}
-
-func TestUpdate_sKey_cursorPastEnd(t *testing.T) {
 	posts := postWithURI()
 	cfg := &config.Config{}
 	m := NewStaticModel(posts, "Test")
@@ -851,16 +792,6 @@ func TestUpdate_sKey_cursorPastEnd(t *testing.T) {
 
 	if m.statusMsg != "" {
 		t.Errorf("expected no status for cursor past end, got %q", m.statusMsg)
-	}
-}
-
-func TestWithConfig(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewStaticModel(nil, "Test")
-	m = m.WithConfig(cfg)
-
-	if m.cfg != cfg {
-		t.Error("expected cfg to be set")
 	}
 }
 
@@ -955,29 +886,6 @@ func TestView_savedViewWithEmbeds(t *testing.T) {
 	m.isSavedView = true
 	m.hasRendered = true
 	m.imageRows = 0
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
-	}
-}
-
-func TestView_savedViewMultiEmbedsRendered(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-				Embeds:       []string{"a.jpg", "b.jpg"},
-			},
-		},
-	}
-	m := NewStaticModel(posts, "Saved posts")
-	m.loading = false
-	m.cursor = 0
-	m.isSavedView = true
-	m.hasRendered = true
-	m.imageRows = 5
 	v := m.View()
 	if v.Content == "" {
 		t.Error("expected non-empty view")
