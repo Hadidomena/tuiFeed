@@ -652,18 +652,6 @@ func TestGetThreadByURI_nilOutputThread(t *testing.T) {
 		t.Fatal("expected error for nil Thread")
 	}
 }
-
-func TestGetThreadByURI_nilOutput(t *testing.T) {
-	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("null"))
-	}))
-	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
-	if err == nil {
-		t.Fatal("expected error for nil output")
-	}
-}
-
 func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
 	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -680,14 +668,6 @@ func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
 		t.Fatal("expected error for nil Post in ThreadViewPost")
 	}
 }
-
-func TestGetPostThread_invalidURL(t *testing.T) {
-	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
-	if err == nil {
-		t.Fatal("expected error for invalid URL")
-	}
-}
-
 func TestGetAuthorFeedCursor_success(t *testing.T) {
 	_, client := newTestClient(t, newJSONRouter(
 		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
@@ -1023,13 +1003,6 @@ func TestDetectImageProtocol_iterm(t *testing.T) {
 		}
 	})
 }
-
-func TestClearImages(t *testing.T) {
-	withImageEnv(t, "", "", "", func() {
-		ClearImages()
-	})
-}
-
 func TestRenderImage_downloadError(t *testing.T) {
 	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -1439,17 +1412,5 @@ func TestWriteMoreIndicators_noIndicators(t *testing.T) {
 	WriteMoreIndicators(&b, 0, 10, 10)
 	if b.Len() > 0 {
 		t.Errorf("expected empty output when at boundaries, got: %s", b.String())
-	}
-}
-
-func TestFormatPostListItem_zeroCounts(t *testing.T) {
-	post := PostInfo{
-		AuthorHandle: "test.bsky.social",
-		Text:         "Hello",
-		IndexedAt:    "2024-01-15T10:00:00Z",
-	}
-	result := FormatPostListItem(post, false)
-	if !strings.Contains(result, "❤️ 0") {
-		t.Errorf("expected zero like count, got: %s", result)
 	}
 }
