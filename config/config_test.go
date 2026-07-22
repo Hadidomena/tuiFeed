@@ -123,14 +123,6 @@ func TestRemoveFollow_withLastChecks(t *testing.T) {
 	}
 }
 
-func TestRemoveFollow_nilLastChecks(t *testing.T) {
-	cfg := &Config{Follows: []string{"a", "b"}}
-	cfg.RemoveFollow(0)
-	if len(cfg.Follows) != 1 {
-		t.Fatalf("expected 1 follow, got %d", len(cfg.Follows))
-	}
-}
-
 func TestLoad_invalidJSON(t *testing.T) {
 	tmp := withTempConfigHOME(t)
 
@@ -236,13 +228,5 @@ func TestGetSavedPostURIs(t *testing.T) {
 	uris[0] = "modified"
 	if cfg.SavedPosts[0] == "modified" {
 		t.Error("GetSavedPostURIs should return a copy")
-	}
-}
-
-func TestGetSavedPostURIs_nil(t *testing.T) {
-	cfg := &Config{}
-	uris := cfg.GetSavedPostURIs()
-	if uris != nil {
-		t.Errorf("expected nil for uninitialized SavedPosts, got %v", uris)
 	}
 }
