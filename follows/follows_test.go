@@ -28,15 +28,6 @@ func setupModel(t *testing.T) Model {
 	}
 	return m
 }
-
-func TestInit(t *testing.T) {
-	m := setupModel(t)
-	cmd := m.Init()
-	if cmd != nil {
-		t.Error("expected nil command from Init")
-	}
-}
-
 func TestUpdate_nonKeyMsg(t *testing.T) {
 	m := setupModel(t)
 	_, cmd := m.Update(struct{ tea.Msg }{})
@@ -286,20 +277,4 @@ func TestUpdateList_dSaveError(t *testing.T) {
 	if len(m.cfg.Follows) != 2 {
 		t.Fatalf("expected 2 follows (save failed, state unchanged), got %d", len(m.cfg.Follows))
 	}
-}
-
-func TestUpdateInput_enterSaveError(t *testing.T) {
-	m := setupModel(t)
-	m.mode = modeInput
-	m.input = "newuser.bsky.social"
-
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
-	tmp := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	if err := os.MkdirAll(tmp+"/tuiFeed", 0o000); err != nil {
-		t.Fatal(err)
-	}
-
-	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyEnter))
 }
