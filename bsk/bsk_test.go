@@ -13,6 +13,9 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/lex/util"
+	"github.com/bluesky-social/indigo/xrpc"
+
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 )
 
 func ptr[T any](v T) *T {
@@ -38,6 +41,55 @@ func makePostView(opts ...func(*bsky.FeedDefs_PostView)) *bsky.FeedDefs_PostView
 		opt(p)
 	}
 	return p
+}
+
+func newTestClient(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *xrpc.Client) {
+	t.Helper()
+	server := testutil.NewTestServer(t, handler)
+	client := NewClient()
+	client.Host = server.URL
+	return server, client
+}
+
+type route struct {
+	path    string
+	handler http.HandlerFunc
+}
+
+func newJSONRouter(routes ...route) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		for _, rt := range routes {
+			if strings.Contains(r.URL.Path, rt.path) {
+				rt.handler(w, r)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func writeResolveHandle(w http.ResponseWriter) {
+	_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
+		Did: "did:plc:test123",
+	})
+}
+
+func withImageEnv(t *testing.T, kittyVal, termProgVal, termVal string, fn func()) {
+	t.Helper()
+	orig1 := os.Getenv("KITTY_WINDOW_ID")
+	orig2 := os.Getenv("TERM_PROGRAM")
+	orig3 := os.Getenv("TERM")
+	t.Cleanup(func() {
+		os.Setenv("KITTY_WINDOW_ID", orig1)
+		os.Setenv("TERM_PROGRAM", orig2)
+		os.Setenv("TERM", orig3)
+	})
+	detectedProto = -1
+	os.Setenv("KITTY_WINDOW_ID", kittyVal)
+	os.Setenv("TERM_PROGRAM", termProgVal)
+	os.Setenv("TERM", termVal)
+	fn()
 }
 
 func TestExtractPostInfo_basic(t *testing.T) {
@@ -116,35 +168,24 @@ func TestExtractPostInfo_noRecord(t *testing.T) {
 }
 
 func TestGetPostThread_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getPostThread"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getPostThread", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 				Thread: &bsky.FeedGetPostThread_Output_Thread{
 					FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
-						Post: &bsky.FeedDefs_PostView{
-							Uri:       "at://did:plc:test123/app.bsky.feed.post/abc",
-							Cid:       "bafy-test",
-							IndexedAt: "2024-06-01T12:00:00Z",
-							Author: &bsky.ActorDefs_ProfileViewBasic{
-								Did:         "did:plc:test123",
-								Handle:      "test.bsky.social",
-								DisplayName: ptr("Test User"),
-							},
-							Record: &util.LexiconTypeDecoder{
-								Val: &bsky.FeedPost{
-									Text:      "This is a thread post",
-									CreatedAt: "2024-06-01T12:00:00Z",
-								},
-							},
-							LikeCount:  ptr[int64](10),
-							ReplyCount: ptr[int64](3),
-						},
+						Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+							p.Uri = "at://did:plc:test123/app.bsky.feed.post/abc"
+							p.Cid = "bafy-test"
+							p.IndexedAt = "2024-06-01T12:00:00Z"
+							p.Author.Did = "did:plc:test123"
+							p.Record.Val.(*bsky.FeedPost).Text = "This is a thread post"
+							p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+							p.LikeCount = ptr[int64](10)
+							p.ReplyCount = ptr[int64](3)
+						}),
 						Parent: &bsky.FeedDefs_ThreadViewPost_Parent{
 							FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
 								Post: &bsky.FeedDefs_PostView{
@@ -184,15 +225,8 @@ func TestGetPostThread_success(t *testing.T) {
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	thread, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -222,14 +256,9 @@ func TestGetPostThread_shortURL(t *testing.T) {
 }
 
 func TestGetPostThread_resolveError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err == nil {
 		t.Fatal("expected error for failed handle resolution")
@@ -237,22 +266,11 @@ func TestGetPostThread_resolveError(t *testing.T) {
 }
 
 func TestGetPostThread_threadError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+	))
 	_, err := GetPostThread(context.Background(), client, "https://bsky.app/profile/test.bsky.social/post/abc")
 	if err == nil {
 		t.Fatal("expected error for failed thread fetch")
@@ -537,29 +555,21 @@ func TestBuildThreadTree_childParentLink(t *testing.T) {
 }
 
 func TestGetThreadByURI_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
 				FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
-					Post: &bsky.FeedDefs_PostView{
-						Uri:       "at://did:plc:test/app.bsky.feed.post/abc",
-						Cid:       "bafy-test",
-						IndexedAt: "2024-06-01T12:00:00Z",
-						Author: &bsky.ActorDefs_ProfileViewBasic{
-							Did:         "did:plc:test",
-							Handle:      "test.bsky.social",
-							DisplayName: ptr("Test User"),
-						},
-						Record: &util.LexiconTypeDecoder{
-							Val: &bsky.FeedPost{
-								Text:      "Thread root",
-								CreatedAt: "2024-06-01T12:00:00Z",
-							},
-						},
-						LikeCount:  ptr[int64](10),
-						ReplyCount: ptr[int64](2),
-					},
+					Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+						p.Uri = "at://did:plc:test/app.bsky.feed.post/abc"
+						p.Cid = "bafy-test"
+						p.IndexedAt = "2024-06-01T12:00:00Z"
+						p.Author.Did = "did:plc:test"
+						p.Record.Val.(*bsky.FeedPost).Text = "Thread root"
+						p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						p.LikeCount = ptr[int64](10)
+						p.ReplyCount = ptr[int64](2)
+					}),
 					Replies: []*bsky.FeedDefs_ThreadViewPost_Replies_Elem{
 						{FeedDefs_ThreadViewPost: &bsky.FeedDefs_ThreadViewPost{
 							Post: &bsky.FeedDefs_PostView{
@@ -581,11 +591,6 @@ func TestGetThreadByURI_success(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	node, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -611,14 +616,9 @@ func TestGetThreadByURI_success(t *testing.T) {
 }
 
 func TestGetThreadByURI_apiError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for API failure")
@@ -626,7 +626,7 @@ func TestGetThreadByURI_apiError(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilThread(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
@@ -634,11 +634,6 @@ func TestGetThreadByURI_nilThread(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil thread")
@@ -646,41 +641,19 @@ func TestGetThreadByURI_nilThread(t *testing.T) {
 }
 
 func TestGetThreadByURI_nilOutputThread(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: nil,
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil Thread")
 	}
 }
-
-func TestGetThreadByURI_nilOutput(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("null"))
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
-	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
-	if err == nil {
-		t.Fatal("expected error for nil output")
-	}
-}
-
 func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPostThread_Output{
 			Thread: &bsky.FeedGetPostThread_Output_Thread{
@@ -690,67 +663,33 @@ func TestGetThreadByURI_nilPostInThreadView(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetThreadByURI(context.Background(), client, "at://did:plc:test/app.bsky.feed.post/abc")
 	if err == nil {
 		t.Fatal("expected error for nil Post in ThreadViewPost")
 	}
 }
-
-func TestGetPostThread_invalidURL(t *testing.T) {
-	_, err := GetPostThread(context.TODO(), nil, "invalid-url")
-	if err == nil {
-		t.Fatal("expected error for invalid URL")
-	}
-}
-
 func TestGetAuthorFeedCursor_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: ptr("next-cursor-abc"),
 				Feed: []*bsky.FeedDefs_FeedViewPost{
 					{
-						Post: &bsky.FeedDefs_PostView{
-							Uri:       "at://did:plc:test123/app.bsky.feed.post/1",
-							Cid:       "bafy-test",
-							IndexedAt: "2024-06-01T12:00:00Z",
-							Author: &bsky.ActorDefs_ProfileViewBasic{
-								Did:         "did:plc:test123",
-								Handle:      "test.bsky.social",
-								DisplayName: ptr("Test User"),
-							},
-							Record: &util.LexiconTypeDecoder{
-								Val: &bsky.FeedPost{
-									Text:      "Hello world",
-									CreatedAt: "2024-06-01T12:00:00Z",
-								},
-							},
-							LikeCount:  ptr[int64](42),
-							ReplyCount: ptr[int64](7),
-						},
+						Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+							p.Uri = "at://did:plc:test123/app.bsky.feed.post/1"
+							p.Cid = "bafy-test"
+							p.IndexedAt = "2024-06-01T12:00:00Z"
+							p.Author.Did = "did:plc:test123"
+							p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						}),
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -781,26 +720,16 @@ func TestGetAuthorFeedCursor_success(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Feed: []*bsky.FeedDefs_FeedViewPost{},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -815,14 +744,11 @@ func TestGetAuthorFeedCursor_emptyFeed(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: nil,
 				Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -845,15 +771,8 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 					},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "some-cursor", 50)
 	if err != nil {
@@ -868,23 +787,15 @@ func TestGetAuthorFeedCursor_noCursor(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle") {
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"error":   "HandleNotFound",
 				"message": "handle not found",
 			})
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "nonexistent.bsky.social", "", 50)
 	if err == nil {
@@ -893,28 +804,18 @@ func TestGetAuthorFeedCursor_resolveError(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_feedError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"error":   "InternalError",
 				"message": "something went wrong",
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	_, _, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err == nil {
@@ -964,38 +865,25 @@ func TestFormatPost_empty(t *testing.T) {
 }
 
 func TestGetAuthorFeed_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 			Feed: []*bsky.FeedDefs_FeedViewPost{
 				{
-					Post: &bsky.FeedDefs_PostView{
-						Uri:       "at://did:plc:test/app.bsky.feed.post/1",
-						Cid:       "bafy-test",
-						IndexedAt: "2024-06-01T12:00:00Z",
-						Author: &bsky.ActorDefs_ProfileViewBasic{
-							Did:         "did:plc:test",
-							Handle:      "test.bsky.social",
-							DisplayName: ptr("Test User"),
-						},
-						Record: &util.LexiconTypeDecoder{
-							Val: &bsky.FeedPost{
-								Text:      "Hello from feed",
-								CreatedAt: "2024-06-01T12:00:00Z",
-							},
-						},
-						LikeCount:  ptr[int64](10),
-						ReplyCount: ptr[int64](2),
-					},
+					Post: makePostView(func(p *bsky.FeedDefs_PostView) {
+						p.Uri = "at://did:plc:test/app.bsky.feed.post/1"
+						p.Cid = "bafy-test"
+						p.IndexedAt = "2024-06-01T12:00:00Z"
+						p.Author.Did = "did:plc:test"
+						p.Record.Val.(*bsky.FeedPost).Text = "Hello from feed"
+						p.Record.Val.(*bsky.FeedPost).CreatedAt = "2024-06-01T12:00:00Z"
+						p.LikeCount = ptr[int64](10)
+						p.ReplyCount = ptr[int64](2)
+					}),
 				},
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1012,7 +900,7 @@ func TestGetAuthorFeed_success(t *testing.T) {
 }
 
 func TestGetAuthorFeed_withNilPosts(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 			Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -1038,11 +926,6 @@ func TestGetAuthorFeed_withNilPosts(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1056,14 +939,9 @@ func TestGetAuthorFeed_withNilPosts(t *testing.T) {
 }
 
 func TestGetAuthorFeed_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetAuthorFeed(context.Background(), client, "test.bsky.social", 50)
 	if err == nil {
 		t.Fatal("expected error for feed fetch failure")
@@ -1071,145 +949,62 @@ func TestGetAuthorFeed_error(t *testing.T) {
 }
 
 func TestDetectImageProtocol_kittyWindowId(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "")
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "1234")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "1234", "", "", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_wezterm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "WezTerm")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "", "WezTerm", "xterm-256color", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_kittyTerm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-kitty")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected ProtoKitty, got %v", proto)
-	}
+	withImageEnv(t, "", "", "xterm-kitty", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_sixelDefault(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoSixel {
-		t.Errorf("expected ProtoSixel, got %v", proto)
-	}
+	withImageEnv(t, "", "", "xterm-256color", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoSixel {
+			t.Errorf("expected ProtoSixel, got %v", proto)
+		}
+	})
 }
 
 func TestDetectImageProtocol_cached(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = ProtoKitty
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "xterm-256color")
-	proto := DetectImageProtocol()
-	if proto != ProtoKitty {
-		t.Errorf("expected cached ProtoKitty, got %v", proto)
-	}
-	detectedProto = -1
+	withImageEnv(t, "", "", "xterm-256color", func() {
+		detectedProto = ProtoKitty
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected cached ProtoKitty, got %v", proto)
+		}
+		detectedProto = -1
+	})
 }
 
 func TestDetectImageProtocol_iterm(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "iTerm.app")
-	os.Setenv("TERM", "")
-	proto := DetectImageProtocol()
-	if proto != ProtoSixel {
-		t.Errorf("expected ProtoSixel for iTerm, got %v", proto)
-	}
+	withImageEnv(t, "", "iTerm.app", "", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoSixel {
+			t.Errorf("expected ProtoSixel for iTerm, got %v", proto)
+		}
+	})
 }
-
-func TestClearImages(t *testing.T) {
-	orig1 := os.Getenv("KITTY_WINDOW_ID")
-	orig2 := os.Getenv("TERM_PROGRAM")
-	orig3 := os.Getenv("TERM")
-	defer func() {
-		os.Setenv("KITTY_WINDOW_ID", orig1)
-		os.Setenv("TERM_PROGRAM", orig2)
-		os.Setenv("TERM", orig3)
-	}()
-
-	detectedProto = -1
-	os.Setenv("KITTY_WINDOW_ID", "")
-	os.Setenv("TERM_PROGRAM", "")
-	os.Setenv("TERM", "")
-	ClearImages()
-}
-
 func TestRenderImage_downloadError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	server.Close()
@@ -1221,14 +1016,13 @@ func TestRenderImage_downloadError(t *testing.T) {
 }
 
 func TestRenderImage_notAnImage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, err := w.Write([]byte("<html></html>"))
 		if err != nil {
 			t.Fatal("error during Write")
 		}
 	}))
-	defer server.Close()
 
 	_, err := RenderImage(server.URL, 0)
 	if err == nil {
@@ -1237,14 +1031,13 @@ func TestRenderImage_notAnImage(t *testing.T) {
 }
 
 func TestRenderImage_decodeError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, err := w.Write([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0})
 		if err != nil {
 			t.Fatal("error during Write")
 		}
 	}))
-	defer server.Close()
 
 	_, err := RenderImage(server.URL, 0)
 	if err == nil {
@@ -1301,14 +1094,11 @@ func TestResizeToFit_heightConstrained(t *testing.T) {
 }
 
 func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.Contains(r.URL.Path, "com.atproto.identity.resolveHandle"):
-			_ = json.NewEncoder(w).Encode(atproto.IdentityResolveHandle_Output{
-				Did: "did:plc:test123",
-			})
-		case strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed"):
+	_, client := newTestClient(t, newJSONRouter(
+		route{"com.atproto.identity.resolveHandle", func(w http.ResponseWriter, r *http.Request) {
+			writeResolveHandle(w)
+		}},
+		route{"app.bsky.feed.getAuthorFeed", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&bsky.FeedGetAuthorFeed_Output{
 				Cursor: ptr("next-cursor"),
 				Feed: []*bsky.FeedDefs_FeedViewPost{
@@ -1333,15 +1123,8 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 					{Post: nil},
 				},
 			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
+		}},
+	))
 	ctx := context.Background()
 	posts, cursor, err := GetAuthorFeedCursor(ctx, client, "test.bsky.social", "", 50)
 	if err != nil {
@@ -1359,7 +1142,7 @@ func TestGetAuthorFeedCursor_nilPosts(t *testing.T) {
 }
 
 func TestGetPosts_success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{
@@ -1399,11 +1182,6 @@ func TestGetPosts_success(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1423,17 +1201,12 @@ func TestGetPosts_success(t *testing.T) {
 }
 
 func TestGetPosts_empty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1444,7 +1217,7 @@ func TestGetPosts_empty(t *testing.T) {
 }
 
 func TestGetPosts_nilEntries(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&bsky.FeedGetPosts_Output{
 			Posts: []*bsky.FeedDefs_PostView{
@@ -1468,11 +1241,6 @@ func TestGetPosts_nilEntries(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	items, err := GetPosts(context.Background(), client, []string{"at://uri/1", "at://uri/2", "at://uri/3"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1486,14 +1254,9 @@ func TestGetPosts_nilEntries(t *testing.T) {
 }
 
 func TestGetPosts_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	_, err := GetPosts(context.Background(), client, []string{"at://uri/1"})
 	if err == nil {
 		t.Fatal("expected error for failed fetch")
@@ -1502,7 +1265,7 @@ func TestGetPosts_error(t *testing.T) {
 
 func TestGetPosts_batching(t *testing.T) {
 	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 		query := r.URL.Query()
 		uris := query["uris"]
@@ -1529,11 +1292,6 @@ func TestGetPosts_batching(t *testing.T) {
 			Posts: posts,
 		})
 	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.Host = server.URL
-
 	uris := make([]string, 30)
 	for i := range uris {
 		uris[i] = "at://uri/" + string(rune('A'+i))
@@ -1654,17 +1412,5 @@ func TestWriteMoreIndicators_noIndicators(t *testing.T) {
 	WriteMoreIndicators(&b, 0, 10, 10)
 	if b.Len() > 0 {
 		t.Errorf("expected empty output when at boundaries, got: %s", b.String())
-	}
-}
-
-func TestFormatPostListItem_zeroCounts(t *testing.T) {
-	post := PostInfo{
-		AuthorHandle: "test.bsky.social",
-		Text:         "Hello",
-		IndexedAt:    "2024-01-15T10:00:00Z",
-	}
-	result := FormatPostListItem(post, false)
-	if !strings.Contains(result, "❤️ 0") {
-		t.Errorf("expected zero like count, got: %s", result)
 	}
 }

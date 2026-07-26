@@ -2,12 +2,11 @@ package attach
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type RenderedMsg struct {
@@ -38,15 +37,9 @@ func Open(embeds []string, imgCursor int) tea.Msg {
 		return ErrorMsg("No image to open")
 	}
 
-	resp, err := http.Get(embeds[imgCursor])
+	data, err := utils.DownloadURL(embeds[imgCursor])
 	if err != nil {
 		return ErrorMsg(fmt.Sprintf("Download failed: %v", err))
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ErrorMsg(fmt.Sprintf("Read failed: %v", err))
 	}
 
 	if err := bsk.RenderImageExternal(data); err != nil {

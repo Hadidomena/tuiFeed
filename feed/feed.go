@@ -12,6 +12,7 @@ import (
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type BackMsg struct{}
@@ -49,7 +50,7 @@ func NewModel() (Model, error) {
 		cfg:      cfg,
 		client:   bsk.NewClient(),
 		loading:  true,
-		pageSize: 10,
+		pageSize: utils.DefaultPageSize,
 		title:    "Feed",
 	}, nil
 }
@@ -57,7 +58,7 @@ func NewModel() (Model, error) {
 func NewStaticModel(posts []bsk.FeedItem, title string) Model {
 	return Model{
 		posts:    posts,
-		pageSize: 10,
+		pageSize: utils.DefaultPageSize,
 		title:    title,
 	}
 }
@@ -72,7 +73,7 @@ func NewSavedModel(cfg *config.Config) Model {
 		cfg:         cfg,
 		client:      bsk.NewClient(),
 		loading:     true,
-		pageSize:    10,
+		pageSize:    utils.DefaultPageSize,
 		title:       "Saved posts",
 		isSavedView: true,
 	}
@@ -143,11 +144,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bsk.ClearImages()
 			return m, func() tea.Msg { return BackMsg{} }
 		case "down", "j":
-			if m.cursor < len(m.posts)-1 {
-				m.cursor++
-				if m.cursor >= m.scrollPos+m.pageSize {
-					m.scrollPos++
-				}
+			old := m.cursor
+			oldScroll := m.scrollPos
+			m.cursor, m.scrollPos = utils.ScrollDown(m.cursor, m.scrollPos, m.pageSize, len(m.posts))
+			if m.cursor != old || m.scrollPos != oldScroll {
 				m.imgCursor = 0
 				m.hasRendered = false
 				m.imageRows = 0
@@ -155,11 +155,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				bsk.ClearImages()
 			}
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-				if m.cursor < m.scrollPos {
-					m.scrollPos--
-				}
+			old := m.cursor
+			oldScroll := m.scrollPos
+			m.cursor, m.scrollPos = utils.ScrollUp(m.cursor, m.scrollPos)
+			if m.cursor != old || m.scrollPos != oldScroll {
 				m.imgCursor = 0
 				m.hasRendered = false
 				m.imageRows = 0
@@ -201,9 +200,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isSavedView {
-				if err := config.Update(func(cfg *config.Config) {
+				fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
 					cfg.RemoveSavedPostByURI(uri)
-				}); err != nil {
+				})
+				if err != nil {
 					m.statusMsg = fmt.Sprintf("Error removing saved post: %v", err)
 					return m, nil
 				}
@@ -223,11 +223,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "Removed from saved"
 				if len(m.posts) == 0 {
 					m.statusMsg = "No saved posts"
-				}
-				fresh, err := config.Load()
-				if err != nil {
-					m.statusMsg = fmt.Sprintf("Saved, but config reload failed: %v", err)
-					return m, nil
 				}
 				m.cfg = fresh
 				return m, nil
@@ -316,9 +311,7 @@ func (m Model) openAttachment() tea.Msg {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString(m.title + "\n")
-	b.WriteString(strings.Repeat("─", 30))
-	b.WriteString("\n\n")
+	utils.WriteHeader(&b, m.title, 30)
 
 	if m.loading {
 		if m.isSavedView {
@@ -334,10 +327,7 @@ func (m Model) View() tea.View {
 	} else {
 		b.WriteString(fmt.Sprintf("%d posts\n\n", len(m.posts)))
 
-		end := m.scrollPos + m.pageSize
-		if end > len(m.posts) {
-			end = len(m.posts)
-		}
+		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.posts))
 
 		for i := m.scrollPos; i < end; i++ {
 			b.WriteString(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i))

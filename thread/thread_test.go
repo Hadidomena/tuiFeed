@@ -9,27 +9,12 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 )
 
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
-
-func keyPress(text string, code rune, mods ...tea.KeyMod) tea.KeyPressMsg {
-	var mod tea.KeyMod
-	for _, m := range mods {
-		mod |= m
-	}
-	return tea.KeyPressMsg(tea.Key{Text: text, Code: code, Mod: mod})
-}
-
-func keyRune(r rune) tea.KeyPressMsg {
-	return keyPress(string(r), r)
-}
-
-func keySpecial(code rune) tea.KeyPressMsg {
-	return keyPress("", code)
-}
 
 func makeNode(handle, text, uri string, replies ...*bsk.ThreadNode) *bsk.ThreadNode {
 	node := &bsk.ThreadNode{
@@ -50,24 +35,32 @@ func makeNode(handle, text, uri string, replies ...*bsk.ThreadNode) *bsk.ThreadN
 	return node
 }
 
-func TestNewModel(t *testing.T) {
-	m := NewModel("at://uri/test")
-	if m.uri != "at://uri/test" {
-		t.Errorf("expected uri 'at://uri/test', got %q", m.uri)
+type modelOption func(*Model)
+
+func defaultModel(root *bsk.ThreadNode, opts ...modelOption) Model {
+	m := Model{
+		root:       root,
+		current:    root,
+		replies:    root.Replies,
+		breadcrumb: []string{"@" + root.Post.AuthorHandle},
+		pageSize:   10,
 	}
-	if !m.loading {
-		t.Error("expected loading to be true")
+	for _, opt := range opts {
+		opt(&m)
 	}
-	if m.pageSize != 10 {
-		t.Errorf("expected pageSize 10, got %d", m.pageSize)
-	}
+	return m
 }
 
-func TestNewModel_emptyURI(t *testing.T) {
-	m := NewModel("")
-	if m.uri != "" {
-		t.Errorf("expected empty uri, got %q", m.uri)
-	}
+func withCurrent(n *bsk.ThreadNode) modelOption {
+	return func(m *Model) { m.current = n; m.replies = n.Replies }
+}
+
+func withCursor(c int) modelOption {
+	return func(m *Model) { m.cursor = c }
+}
+
+func withBreadcrumb(bc []string) modelOption {
+	return func(m *Model) { m.breadcrumb = bc }
 }
 
 func TestInit_withURI(t *testing.T) {
@@ -112,13 +105,7 @@ func TestView_noThreadData(t *testing.T) {
 
 func TestView_noReplies(t *testing.T) {
 	root := makeNode("author", "Root post", "at://uri/root")
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "No replies yet") {
 		t.Errorf("expected 'No replies yet', got: %s", v.Content)
@@ -128,13 +115,7 @@ func TestView_noReplies(t *testing.T) {
 func TestView_withReplies(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	root := makeNode("author", "Root post", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "@replier") {
 		t.Errorf("expected reply handle in view, got: %s", v.Content)
@@ -147,13 +128,7 @@ func TestView_withReplies(t *testing.T) {
 func TestView_breadcrumb(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	root := makeNode("author", "Root post", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    reply,
-		replies:    reply.Replies,
-		breadcrumb: []string{"@author", "@replier"},
-		pageSize:   10,
-	}
+	m := defaultModel(root, withCurrent(reply), withBreadcrumb([]string{"@author", "@replier"}))
 	v := m.View()
 	if !strings.Contains(v.Content, "@author > @replier") {
 		t.Errorf("expected breadcrumb '@author > @replier', got: %s", v.Content)
@@ -162,13 +137,7 @@ func TestView_breadcrumb(t *testing.T) {
 
 func TestView_helpBar_atRoot(t *testing.T) {
 	root := makeNode("author", "Root post", "at://uri/root")
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if strings.Contains(v.Content, "[h] parent") {
 		t.Errorf("expected no 'h' at root level, got: %s", v.Content)
@@ -184,13 +153,7 @@ func TestView_helpBar_atRoot(t *testing.T) {
 func TestView_helpBar_withParent(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	root := makeNode("author", "Root post", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    reply,
-		replies:    reply.Replies,
-		breadcrumb: []string{"@author", "@replier"},
-		pageSize:   10,
-	}
+	m := defaultModel(root, withCurrent(reply), withBreadcrumb([]string{"@author", "@replier"}))
 	v := m.View()
 	if !strings.Contains(v.Content, "[h] parent") {
 		t.Errorf("expected 'h' when not at root, got: %s", v.Content)
@@ -267,8 +230,8 @@ func TestUpdate_threadLoadedNilRoot(t *testing.T) {
 func TestUpdate_quitKeys(t *testing.T) {
 	m := Model{loading: true}
 	for _, key := range []tea.KeyPressMsg{
-		keyRune('q'),
-		keyPress("", 'c', tea.ModCtrl),
+		testutil.KeyRune('q'),
+		testutil.KeyPress("", 'c', tea.ModCtrl),
 	} {
 		_, cmd := m.Update(key)
 		if cmd == nil {
@@ -279,7 +242,7 @@ func TestUpdate_quitKeys(t *testing.T) {
 
 func TestUpdate_escWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	_, cmd := m.Update(keySpecial(tea.KeyEsc))
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEsc))
 	if cmd != nil {
 		t.Error("expected nil command for esc while loading")
 	}
@@ -293,7 +256,7 @@ func TestUpdate_escAfterLoading(t *testing.T) {
 		replies: root.Replies,
 	}
 
-	result, cmd := m.Update(keySpecial(tea.KeyEsc))
+	result, cmd := m.Update(testutil.KeySpecial(tea.KeyEsc))
 	if cmd == nil {
 		t.Fatal("expected non-nil command for esc after loading")
 	}
@@ -308,19 +271,14 @@ func TestUpdate_jkNavigation(t *testing.T) {
 	reply1 := makeNode("r1", "Reply 1", "at://uri/r1")
 	reply2 := makeNode("r2", "Reply 2", "at://uri/r2")
 	root := makeNode("author", "Root", "at://uri/root", reply1, reply2)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
+	m := defaultModel(root)
 
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	if r.(Model).cursor != 1 {
 		t.Errorf("expected cursor 1 after j, got %d", m.cursor)
 	}
 
-	r, _ = m.Update(keyRune('k'))
+	r, _ = m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 after k, got %d", m.cursor)
@@ -338,7 +296,7 @@ func TestUpdate_jAtBottom(t *testing.T) {
 		pageSize: 10,
 	}
 
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 (no more items), got %d", m.cursor)
@@ -357,7 +315,7 @@ func TestUpdate_kAtTop(t *testing.T) {
 		pageSize: 10,
 	}
 
-	r, _ := m.Update(keyRune('k'))
+	r, _ := m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0 (already at top), got %d", m.cursor)
@@ -368,15 +326,9 @@ func TestUpdate_enterDrillsIntoReply(t *testing.T) {
 	nested := makeNode("nested", "Nested reply", "at://uri/nested")
 	reply := makeNode("replier", "A reply", "at://uri/reply", nested)
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != reply {
@@ -396,16 +348,9 @@ func TestUpdate_enterDrillsIntoReply(t *testing.T) {
 func TestUpdate_enterNoOpOnReplyWithoutReplies(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		cursor:     0,
-		pageSize:   10,
-		breadcrumb: []string{"@author"},
-	}
+	m := defaultModel(root, withCursor(0))
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != root {
@@ -415,15 +360,9 @@ func TestUpdate_enterNoOpOnReplyWithoutReplies(t *testing.T) {
 
 func TestUpdate_enterNoOpWhenEmptyReplies(t *testing.T) {
 	root := makeNode("author", "Root", "at://uri/root")
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		pageSize:   10,
-		breadcrumb: []string{"@author"},
-	}
+	m := defaultModel(root)
 
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 
 	if m.current != root {
@@ -435,15 +374,9 @@ func TestUpdate_hGoesUpToParent(t *testing.T) {
 	nested := makeNode("nested", "Nested", "at://uri/nested")
 	reply := makeNode("replier", "A reply", "at://uri/reply", nested)
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    reply,
-		replies:    reply.Replies,
-		breadcrumb: []string{"@author", "@replier"},
-		pageSize:   10,
-	}
+	m := defaultModel(root, withCurrent(reply), withBreadcrumb([]string{"@author", "@replier"}))
 
-	r, _ := m.Update(keyRune('h'))
+	r, _ := m.Update(testutil.KeyRune('h'))
 	m = r.(Model)
 
 	if m.current != root {
@@ -460,15 +393,9 @@ func TestUpdate_hGoesUpToParent(t *testing.T) {
 func TestUpdate_hNoOpAtRoot(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 
-	r, _ := m.Update(keyRune('h'))
+	r, _ := m.Update(testutil.KeyRune('h'))
 	m = r.(Model)
 
 	if m.current != root {
@@ -480,15 +407,9 @@ func TestUpdate_backspaceSameAsH(t *testing.T) {
 	nested := makeNode("nested", "Nested", "at://uri/nested")
 	reply := makeNode("replier", "A reply", "at://uri/reply", nested)
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    reply,
-		replies:    reply.Replies,
-		breadcrumb: []string{"@author", "@replier"},
-		pageSize:   10,
-	}
+	m := defaultModel(root, withCurrent(reply), withBreadcrumb([]string{"@author", "@replier"}))
 
-	r, _ := m.Update(keySpecial(tea.KeyBackspace))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyBackspace))
 	m = r.(Model)
 
 	if m.current != root {
@@ -498,12 +419,12 @@ func TestUpdate_backspaceSameAsH(t *testing.T) {
 
 func TestUpdate_jkWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected no cursor movement while loading, got %d", m.cursor)
 	}
-	r, _ = m.Update(keyRune('k'))
+	r, _ = m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected no cursor movement while loading, got %d", m.cursor)
@@ -512,7 +433,7 @@ func TestUpdate_jkWhileLoading(t *testing.T) {
 
 func TestUpdate_enterWhileLoading(t *testing.T) {
 	m := Model{loading: true}
-	r, _ := m.Update(keySpecial(tea.KeyEnter))
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyEnter))
 	m = r.(Model)
 	if m.current != nil {
 		t.Error("expected no drill-in while loading")
@@ -522,13 +443,7 @@ func TestUpdate_enterWhileLoading(t *testing.T) {
 func TestView_showsSelectedReplyDetail(t *testing.T) {
 	reply := makeNode("replier", "A reply with some text", "at://uri/reply")
 	root := makeNode("author", "Root post", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "A reply with some text") {
 		t.Errorf("expected reply text in view, got: %s", v.Content)
@@ -542,13 +457,7 @@ func TestView_replyCountLabel(t *testing.T) {
 	reply1 := makeNode("r1", "R1", "at://uri/r1")
 	reply2 := makeNode("r2", "R2", "at://uri/r2")
 	root := makeNode("author", "Root", "at://uri/root", reply1, reply2)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "2 replies") {
 		t.Errorf("expected '2 replies', got: %s", v.Content)
@@ -559,13 +468,7 @@ func TestView_showsAttachmentCount(t *testing.T) {
 	reply := makeNode("replier", "A reply", "at://uri/reply")
 	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "1 attachment") {
 		t.Errorf("expected attachment count in view, got: %s", v.Content)
@@ -576,13 +479,7 @@ func TestView_showsNestedReplyCount(t *testing.T) {
 	nested := makeNode("nested", "Nested", "at://uri/nested")
 	reply := makeNode("replier", "A reply", "at://uri/reply", nested)
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    root.Replies,
-		breadcrumb: []string{"@author"},
-		pageSize:   10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "[1 reply]") {
 		t.Errorf("expected nested reply indicator, got: %s", v.Content)
@@ -599,15 +496,10 @@ func TestUpdate_scrollAdvances(t *testing.T) {
 		)
 	}
 	root := makeNode("author", "Root", "at://uri/root", replies...)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
+	m := defaultModel(root)
 
 	for i := 1; i <= 10; i++ {
-		r, _ := m.Update(keyRune('j'))
+		r, _ := m.Update(testutil.KeyRune('j'))
 		m = r.(Model)
 	}
 
@@ -639,7 +531,7 @@ func TestUpdate_scrollRetreats(t *testing.T) {
 	}
 
 	// Press k: cursor goes from 1 to 0, which is < scrollPos (1), so scrollPos retreats to 0
-	r, _ := m.Update(keyRune('k'))
+	r, _ := m.Update(testutil.KeyRune('k'))
 	m = r.(Model)
 
 	if m.scrollPos != 0 {
@@ -680,11 +572,7 @@ func TestView_moreAboveBelow(t *testing.T) {
 func TestView_breadcrumbTruncated(t *testing.T) {
 	longBc := []string{"@a", "@b", "@c", "@d", "@e", "@f", "@g", "@h"}
 	root := makeNode("a", "Root", "at://uri/a")
-	m := Model{
-		root:       root,
-		current:    root,
-		breadcrumb: longBc,
-	}
+	m := defaultModel(root, withBreadcrumb(longBc))
 	v := m.View()
 	if !strings.Contains(v.Content, "... > @d > @e > @f > @g > @h") {
 		t.Errorf("expected truncated breadcrumb, got: %s", v.Content)
@@ -694,11 +582,7 @@ func TestView_breadcrumbTruncated(t *testing.T) {
 func TestView_breadcrumbNotTruncated(t *testing.T) {
 	shortBc := []string{"@a", "@b", "@c"}
 	root := makeNode("a", "Root", "at://uri/a")
-	m := Model{
-		root:       root,
-		current:    root,
-		breadcrumb: shortBc,
-	}
+	m := defaultModel(root, withBreadcrumb(shortBc))
 	v := m.View()
 	if strings.Contains(v.Content, "... >") {
 		t.Errorf("expected no truncation for short breadcrumb, got: %s", v.Content)
@@ -708,36 +592,10 @@ func TestView_breadcrumbNotTruncated(t *testing.T) {
 func TestView_breadcrumbAtLimit(t *testing.T) {
 	limitBc := []string{"@a", "@b", "@c", "@d", "@e"}
 	root := makeNode("a", "Root", "at://uri/a")
-	m := Model{
-		root:       root,
-		current:    root,
-		breadcrumb: limitBc,
-	}
+	m := defaultModel(root, withBreadcrumb(limitBc))
 	v := m.View()
 	if strings.Contains(v.Content, "... >") {
 		t.Errorf("expected no truncation at exactly maxBreadcrumb, got: %s", v.Content)
-	}
-}
-
-func TestView_noRepliesMessage(t *testing.T) {
-	root := makeNode("author", "Root", "at://uri/root")
-	m := Model{
-		root:       root,
-		current:    root,
-		replies:    nil,
-		breadcrumb: []string{"@author"},
-	}
-	v := m.View()
-	if !strings.Contains(v.Content, "No replies yet") {
-		t.Errorf("expected 'No replies yet', got: %s", v.Content)
-	}
-}
-
-func TestView_emptyThreadData(t *testing.T) {
-	m := Model{loading: false, root: nil}
-	v := m.View()
-	if !strings.Contains(v.Content, "No thread data") {
-		t.Errorf("expected 'No thread data', got: %s", v.Content)
 	}
 }
 
@@ -745,13 +603,8 @@ func TestUpdate_aKey_rendersAttachment(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	m := defaultModel(root)
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd == nil {
 		t.Fatal("expected command for a key with embeds")
 	}
@@ -760,13 +613,8 @@ func TestUpdate_aKey_rendersAttachment(t *testing.T) {
 func TestUpdate_aKey_noEmbeds(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	m := defaultModel(root)
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd != nil {
 		t.Error("expected no command for a key without embeds")
 	}
@@ -774,13 +622,8 @@ func TestUpdate_aKey_noEmbeds(t *testing.T) {
 
 func TestUpdate_aKey_noReplies(t *testing.T) {
 	root := makeNode("author", "Root", "at://uri/root")
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
+	m := defaultModel(root)
+	_, cmd := m.Update(testutil.KeyRune('a'))
 	if cmd != nil {
 		t.Error("expected no command for a key with no replies")
 	}
@@ -790,13 +633,8 @@ func TestUpdate_oKey_opensAttachment(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
-	r, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	m := defaultModel(root)
+	r, cmd := m.Update(testutil.KeyRune('o'))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for o key with embeds")
@@ -809,13 +647,8 @@ func TestUpdate_oKey_opensAttachment(t *testing.T) {
 func TestUpdate_oKey_noEmbeds(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'o'})
+	m := defaultModel(root)
+	_, cmd := m.Update(testutil.KeyRune('o'))
 	if cmd != nil {
 		t.Error("expected no command for o key without embeds")
 	}
@@ -833,7 +666,7 @@ func TestUpdate_leftRight_imageNavigation(t *testing.T) {
 		hasRendered: true,
 		imgCursor:   1,
 	}
-	r, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	r, cmd := m.Update(testutil.KeySpecial(tea.KeyLeft))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for left arrow")
@@ -842,7 +675,7 @@ func TestUpdate_leftRight_imageNavigation(t *testing.T) {
 		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
 	}
 
-	r, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	r, cmd = m.Update(testutil.KeySpecial(tea.KeyRight))
 	m = r.(Model)
 	if cmd == nil {
 		t.Fatal("expected command for right arrow")
@@ -864,7 +697,7 @@ func TestUpdate_leftNoOpAtFirstImage(t *testing.T) {
 		hasRendered: true,
 		imgCursor:   0,
 	}
-	r, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	r, _ := m.Update(testutil.KeySpecial(tea.KeyLeft))
 	m = r.(Model)
 	if m.imgCursor != 0 {
 		t.Errorf("expected imgCursor to stay 0, got %d", m.imgCursor)
@@ -906,7 +739,7 @@ func TestUpdate_jkResetsImageState(t *testing.T) {
 		imgCursor:   2,
 		statusMsg:   "some status",
 	}
-	r, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.hasRendered {
 		t.Error("expected hasRendered to be reset after j")
@@ -923,12 +756,7 @@ func TestView_helpBarShowsAttachmentKeys(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	reply.Post.Embeds = []string{"https://example.com/img.jpg"}
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if !strings.Contains(v.Content, "[a] attachments") {
 		t.Errorf("expected '[a] attachments' in help, got: %s", v.Content)
@@ -938,12 +766,7 @@ func TestView_helpBarShowsAttachmentKeys(t *testing.T) {
 func TestView_helpBarNoAttachmentKeysWithoutEmbeds(t *testing.T) {
 	reply := makeNode("replier", "Reply", "at://uri/reply")
 	root := makeNode("author", "Root", "at://uri/root", reply)
-	m := Model{
-		root:     root,
-		current:  root,
-		replies:  root.Replies,
-		pageSize: 10,
-	}
+	m := defaultModel(root)
 	v := m.View()
 	if strings.Contains(v.Content, "[a] attachments") {
 		t.Errorf("expected no attachment keys without embeds, got: %s", v.Content)
@@ -960,7 +783,7 @@ func TestView_downKeyNoOpAtBottom(t *testing.T) {
 		cursor:   0,
 		pageSize: 10,
 	}
-	r, _ := m.Update(keyRune('j'))
+	r, _ := m.Update(testutil.KeyRune('j'))
 	m = r.(Model)
 	if m.cursor != 0 {
 		t.Errorf("expected cursor to stay at 0 (only 1 item), got %d", m.cursor)

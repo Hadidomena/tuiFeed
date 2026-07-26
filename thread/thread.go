@@ -9,6 +9,7 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type BackMsg struct{}
@@ -38,7 +39,7 @@ func NewModel(uri string) Model {
 	return Model{
 		uri:      uri,
 		loading:  true,
-		pageSize: 10,
+		pageSize: utils.DefaultPageSize,
 	}
 }
 
@@ -75,28 +76,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, func() tea.Msg { return BackMsg{} }
 		case "down", "j":
-			if !m.loading && m.cursor < len(m.replies)-1 {
-				m.cursor++
-				if m.cursor >= m.scrollPos+m.pageSize {
-					m.scrollPos++
+			if !m.loading {
+				old := m.cursor
+				oldScroll := m.scrollPos
+				m.cursor, m.scrollPos = utils.ScrollDown(m.cursor, m.scrollPos, m.pageSize, len(m.replies))
+				if m.cursor != old || m.scrollPos != oldScroll {
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
 				}
-				m.imgCursor = 0
-				m.hasRendered = false
-				m.imageRows = 0
-				m.statusMsg = ""
-				bsk.ClearImages()
 			}
 		case "up", "k":
-			if !m.loading && m.cursor > 0 {
-				m.cursor--
-				if m.cursor < m.scrollPos {
-					m.scrollPos--
+			if !m.loading {
+				old := m.cursor
+				oldScroll := m.scrollPos
+				m.cursor, m.scrollPos = utils.ScrollUp(m.cursor, m.scrollPos)
+				if m.cursor != old || m.scrollPos != oldScroll {
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
 				}
-				m.imgCursor = 0
-				m.hasRendered = false
-				m.imageRows = 0
-				m.statusMsg = ""
-				bsk.ClearImages()
 			}
 		case "h", "backspace":
 			if !m.loading && m.current != m.root {
@@ -192,9 +195,7 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 
 	if m.statusMsg != "" && m.root == nil {
-		b.WriteString("Comments\n")
-		b.WriteString(strings.Repeat("─", 30))
-		b.WriteString("\n\n")
+		utils.WriteHeader(&b, "Comments", 30)
 		b.WriteString(m.statusMsg + "\n")
 		return tea.NewView(b.String())
 	}
@@ -209,9 +210,7 @@ func (m Model) View() tea.View {
 		return tea.NewView(b.String())
 	}
 
-	b.WriteString("Comments\n")
-	b.WriteString(strings.Repeat("─", 30))
-	b.WriteString("\n\n")
+	utils.WriteHeader(&b, "Comments", 30)
 
 	const maxBreadcrumb = 5
 	if len(m.breadcrumb) > maxBreadcrumb {
@@ -225,26 +224,15 @@ func (m Model) View() tea.View {
 	if len(m.replies) == 0 {
 		b.WriteString("  No replies yet.\n")
 	} else {
-		replyLabel := "ies"
-		if len(m.replies) == 1 {
-			replyLabel = "y"
-		}
-		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), replyLabel))
+		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), utils.Pluralize(len(m.replies), "y", "ies")))
 
-		end := m.scrollPos + m.pageSize
-		if end > len(m.replies) {
-			end = len(m.replies)
-		}
+		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
 
 		for i := m.scrollPos; i < end; i++ {
 			reply := m.replies[i]
 			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i))
 			if len(reply.Replies) > 0 {
-				nestedLabel := "ies"
-				if len(reply.Replies) == 1 {
-					nestedLabel = "y"
-				}
-				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), nestedLabel))
+				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), utils.Pluralize(len(reply.Replies), "y", "ies")))
 			}
 			b.WriteString("\n")
 		}

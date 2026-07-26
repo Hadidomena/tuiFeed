@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type mode int
@@ -56,13 +57,9 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		return m, func() tea.Msg { return BackMsg{} }
 	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.cursor = utils.CursorUp(m.cursor)
 	case "down", "j":
-		if m.cursor < len(m.cfg.Follows)-1 {
-			m.cursor++
-		}
+		m.cursor = utils.CursorDown(m.cursor, len(m.cfg.Follows))
 	case "a":
 		m.mode = modeInput
 		m.input = ""
@@ -70,7 +67,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		if len(m.cfg.Follows) > 0 {
 			handle := m.cfg.Follows[m.cursor]
-			if err := config.Update(func(cfg *config.Config) {
+			fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
 				idx := -1
 				for i, h := range cfg.Follows {
 					if h == handle {
@@ -81,13 +78,9 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				if idx >= 0 {
 					cfg.RemoveFollow(idx)
 				}
-			}); err != nil {
-				m.statusMsg = fmt.Sprintf("Error removing follow: %v", err)
-				return m, nil
-			}
-			fresh, err := config.Load()
+			})
 			if err != nil {
-				m.statusMsg = fmt.Sprintf("Error reloading config: %v", err)
+				m.statusMsg = fmt.Sprintf("Error removing follow: %v", err)
 				return m, nil
 			}
 			m.cfg = fresh
@@ -114,15 +107,11 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		handle = strings.TrimPrefix(handle, "@")
-		if err := config.Update(func(cfg *config.Config) {
+		fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
 			cfg.AddFollow(handle)
-		}); err != nil {
-			m.statusMsg = fmt.Sprintf("Error adding follow: %v", err)
-			return m, nil
-		}
-		fresh, err := config.Load()
+		})
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error reloading config: %v", err)
+			m.statusMsg = fmt.Sprintf("Error adding follow: %v", err)
 			return m, nil
 		}
 		m.cfg = fresh

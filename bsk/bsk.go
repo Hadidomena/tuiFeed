@@ -3,13 +3,14 @@ package bsk
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/xrpc"
+
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type PostInfo struct {
@@ -243,18 +244,12 @@ func FormatPost(item FeedItem, imgCursor int) string {
 }
 
 func RenderImage(url string, yOffset int) (int, error) {
-	resp, err := http.Get(url)
+	data, err := utils.DownloadURL(url)
 	if err != nil {
-		return 0, fmt.Errorf("download failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("read failed: %w", err)
+		return 0, err
 	}
 
-	ct := resp.Header.Get("Content-Type")
+	ct := http.DetectContentType(data)
 	if !strings.HasPrefix(ct, "image/") {
 		return 0, fmt.Errorf("not an image: %s", ct)
 	}
