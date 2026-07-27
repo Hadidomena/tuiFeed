@@ -47,11 +47,15 @@ type PostsFetchedMsg struct {
 type DashboardModel struct {
 	cursor  int
 	choices []string
+	width   int
+	height  int
 }
 
 func NewDashboardModel() DashboardModel {
 	return DashboardModel{
 		choices: []string{"View Feed", "Posts since last check", "Manage follows", "Saved posts"},
+		width:   utils.DefaultWidth,
+		height:  24,
 	}
 }
 
@@ -61,6 +65,9 @@ func (m DashboardModel) Init() tea.Cmd {
 
 func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -104,12 +111,16 @@ type AccountSelectModel struct {
 	accounts   []string
 	lastChecks map[string]string
 	cursor     int
+	width      int
+	height     int
 }
 
 func NewAccountSelectModel(cfg *config.Config) AccountSelectModel {
 	return AccountSelectModel{
 		accounts:   cfg.Follows,
 		lastChecks: cfg.LastChecks,
+		width:      utils.DefaultWidth,
+		height:     24,
 	}
 }
 
@@ -119,6 +130,10 @@ func (m AccountSelectModel) Init() tea.Cmd {
 
 func (m AccountSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
@@ -169,6 +184,8 @@ func (m AccountSelectModel) View() tea.View {
 
 type LoadingModel struct {
 	message string
+	width   int
+	height  int
 }
 
 func (m LoadingModel) Init() tea.Cmd {
@@ -176,7 +193,10 @@ func (m LoadingModel) Init() tea.Cmd {
 }
 
 func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyPressMsg:
 		return m, nil
 	}
@@ -196,6 +216,8 @@ type MainModel struct {
 	feed          feed.Model
 	thread        thread.Model
 	loading       LoadingModel
+	width         int
+	height        int
 }
 
 func NewMainModel() MainModel {
@@ -220,6 +242,8 @@ func NewMainModel() MainModel {
 		follows:   fm,
 		feed:      fd,
 		loading:   LoadingModel{message: "Fetching posts..."},
+		width:     utils.DefaultWidth,
+		height:    24,
 	}
 }
 
@@ -231,6 +255,9 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case OpenFollowsMsg:
 		m.state = showFollowsView
 		fm, err := follows.NewModel()

@@ -33,6 +33,8 @@ type Model struct {
 	imgCursor   int
 	hasRendered bool
 	imageRows   int
+	width       int
+	height      int
 }
 
 func NewModel(uri string) Model {
@@ -40,6 +42,8 @@ func NewModel(uri string) Model {
 		uri:      uri,
 		loading:  true,
 		pageSize: utils.DefaultPageSize,
+		width:    utils.DefaultWidth,
+		height:   24,
 	}
 }
 
@@ -62,6 +66,10 @@ func (m Model) loadThread() tea.Msg {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.pageSize = utils.PageSize(msg.Height)
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
