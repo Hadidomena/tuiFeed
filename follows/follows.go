@@ -25,6 +25,8 @@ type Model struct {
 	mode      mode
 	input     string
 	statusMsg string
+	width     int
+	height    int
 }
 
 func NewModel() (Model, error) {
@@ -32,7 +34,11 @@ func NewModel() (Model, error) {
 	if err != nil {
 		return Model{}, err
 	}
-	return Model{cfg: cfg}, nil
+	return Model{
+		cfg:    cfg,
+		width:  utils.DefaultWidth,
+		height: 24,
+	}, nil
 }
 
 func (m Model) Init() tea.Cmd {
@@ -41,6 +47,10 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeList:
