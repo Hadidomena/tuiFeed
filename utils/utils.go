@@ -8,6 +8,29 @@ import (
 )
 
 const DefaultPageSize = 10
+const DefaultWidth = 80
+
+func ContentWidth(termWidth int) int {
+	if termWidth <= 0 {
+		return DefaultWidth - 4
+	}
+	available := termWidth - 4
+	if available > 120 {
+		return 120
+	}
+	return available
+}
+
+func PageSize(termHeight int) int {
+	if termHeight <= 0 {
+		return DefaultPageSize
+	}
+	usable := termHeight - 6
+	if usable < 3 {
+		return 3
+	}
+	return usable
+}
 
 func DownloadURL(url string) ([]byte, error) {
 	resp, err := http.Get(url)
