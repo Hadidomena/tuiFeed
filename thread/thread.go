@@ -1,0 +1,278 @@
+package thread
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/Hadidomena/tuiFeed/attach"
+	"github.com/Hadidomena/tuiFeed/bsk"
+	"github.com/Hadidomena/tuiFeed/utils"
+)
+
+type BackMsg struct{}
+
+type threadLoadedMsg struct {
+	root *bsk.ThreadNode
+	err  error
+}
+
+type Model struct {
+	root        *bsk.ThreadNode
+	current     *bsk.ThreadNode
+	replies     []*bsk.ThreadNode
+	cursor      int
+	scrollPos   int
+	pageSize    int
+	breadcrumb  []string
+	loading     bool
+	statusMsg   string
+	uri         string
+	imgCursor   int
+	hasRendered bool
+	imageRows   int
+}
+
+func NewModel(uri string) Model {
+	return Model{
+		uri:      uri,
+		loading:  true,
+		pageSize: utils.DefaultPageSize,
+	}
+}
+
+func (m Model) Init() tea.Cmd {
+	if m.uri == "" {
+		return nil
+	}
+	return m.loadThread
+}
+
+func (m Model) loadThread() tea.Msg {
+	ctx := context.Background()
+	client := bsk.NewClient()
+	root, err := bsk.GetThreadByURI(ctx, client, m.uri)
+	if err != nil {
+		return threadLoadedMsg{err: err}
+	}
+	return threadLoadedMsg{root: root}
+}
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			bsk.ClearImages()
+			return m, tea.Quit
+		case "esc":
+			m.hasRendered = false
+			m.imageRows = 0
+			bsk.ClearImages()
+			if m.loading {
+				return m, nil
+			}
+			return m, func() tea.Msg { return BackMsg{} }
+		case "down", "j":
+			if !m.loading {
+				old := m.cursor
+				oldScroll := m.scrollPos
+				m.cursor, m.scrollPos = utils.ScrollDown(m.cursor, m.scrollPos, m.pageSize, len(m.replies))
+				if m.cursor != old || m.scrollPos != oldScroll {
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
+				}
+			}
+		case "up", "k":
+			if !m.loading {
+				old := m.cursor
+				oldScroll := m.scrollPos
+				m.cursor, m.scrollPos = utils.ScrollUp(m.cursor, m.scrollPos)
+				if m.cursor != old || m.scrollPos != oldScroll {
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
+				}
+			}
+		case "h", "backspace":
+			if !m.loading && m.current != m.root {
+				m.current = m.current.Parent
+				m.replies = m.current.Replies
+				m.breadcrumb = m.breadcrumb[:len(m.breadcrumb)-1]
+				m.cursor = 0
+				m.scrollPos = 0
+				m.imgCursor = 0
+				m.hasRendered = false
+				m.imageRows = 0
+				m.statusMsg = ""
+				bsk.ClearImages()
+			}
+		case "enter":
+			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) {
+				reply := m.replies[m.cursor]
+				if len(reply.Replies) > 0 {
+					m.current = reply
+					m.replies = reply.Replies
+					m.breadcrumb = append(m.breadcrumb, "@"+reply.Post.AuthorHandle)
+					m.cursor = 0
+					m.scrollPos = 0
+					m.imgCursor = 0
+					m.hasRendered = false
+					m.imageRows = 0
+					m.statusMsg = ""
+					bsk.ClearImages()
+				}
+			}
+		case "left":
+			if !m.loading && m.hasRendered && m.imgCursor > 0 && len(m.replies) > 0 && m.cursor < len(m.replies) {
+				m.imgCursor--
+				return m, m.renderAttachment
+			}
+		case "right", "l":
+			if !m.loading && m.hasRendered && len(m.replies) > 0 && m.cursor < len(m.replies) && m.imgCursor < len(m.replies[m.cursor].Post.Embeds)-1 {
+				m.imgCursor++
+				return m, m.renderAttachment
+			}
+		case "a":
+			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				m.imgCursor = 0
+				m.hasRendered = true
+				return m, m.renderAttachment
+			}
+		case "o":
+			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				if !m.hasRendered {
+					m.hasRendered = true
+					m.imgCursor = 0
+				}
+				m.statusMsg = "Opening image externally..."
+				return m, m.openAttachment
+			}
+		}
+	case threadLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Error loading thread: %v", msg.err)
+		} else if msg.root == nil {
+			m.statusMsg = "Error: empty thread data received"
+		} else {
+			m.root = msg.root
+			m.current = msg.root
+			m.replies = msg.root.Replies
+			m.breadcrumb = []string{"@" + msg.root.Post.AuthorHandle}
+		}
+	case attach.RenderedMsg:
+		m.imageRows = msg.ImageRows
+		m.statusMsg = msg.Status
+	case attach.ErrorMsg:
+		m.statusMsg = string(msg)
+	}
+
+	return m, nil
+}
+
+func (m Model) renderAttachment() tea.Msg {
+	reply := m.replies[m.cursor]
+	postText := bsk.FormatPost(bsk.FeedItem{PostInfo: reply.Post, URI: reply.URI}, m.imgCursor)
+	postLines := strings.Count(postText, "\n")
+	yOffset := 6 + postLines
+	return attach.Render(reply.Post.Embeds, m.imgCursor, yOffset)
+}
+
+func (m Model) openAttachment() tea.Msg {
+	reply := m.replies[m.cursor]
+	return attach.Open(reply.Post.Embeds, m.imgCursor)
+}
+
+func (m Model) View() tea.View {
+	var b strings.Builder
+
+	if m.statusMsg != "" && m.root == nil {
+		utils.WriteHeader(&b, "Comments", 30)
+		b.WriteString(m.statusMsg + "\n")
+		return tea.NewView(b.String())
+	}
+
+	if m.loading {
+		b.WriteString("Loading comments...\n")
+		return tea.NewView(b.String())
+	}
+
+	if m.root == nil {
+		b.WriteString("No thread data.\n")
+		return tea.NewView(b.String())
+	}
+
+	utils.WriteHeader(&b, "Comments", 30)
+
+	const maxBreadcrumb = 5
+	if len(m.breadcrumb) > maxBreadcrumb {
+		b.WriteString("... > ")
+		b.WriteString(strings.Join(m.breadcrumb[len(m.breadcrumb)-maxBreadcrumb:], " > "))
+	} else {
+		b.WriteString(strings.Join(m.breadcrumb, " > "))
+	}
+	b.WriteString("\n\n")
+
+	if len(m.replies) == 0 {
+		b.WriteString("  No replies yet.\n")
+	} else {
+		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), utils.Pluralize(len(m.replies), "y", "ies")))
+
+		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
+
+		for i := m.scrollPos; i < end; i++ {
+			reply := m.replies[i]
+			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i))
+			if len(reply.Replies) > 0 {
+				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), utils.Pluralize(len(reply.Replies), "y", "ies")))
+			}
+			b.WriteString("\n")
+		}
+
+		bsk.WriteMoreIndicators(&b, m.scrollPos, end, len(m.replies))
+		idx := m.cursor
+		if idx >= len(m.replies) {
+			idx = 0
+		}
+		b.WriteString(fmt.Sprintf("Reply %d/%d\n\n", idx+1, len(m.replies)))
+
+		selected := m.replies[idx]
+		cursor := -1
+		if m.hasRendered {
+			cursor = m.imgCursor
+		}
+		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor))
+	}
+
+	if m.imageRows > 0 {
+		b.WriteString(strings.Repeat("\n", m.imageRows))
+	}
+
+	if m.statusMsg != "" {
+		b.WriteString(fmt.Sprintf("%s\n", m.statusMsg))
+	}
+
+	hasEmbeds := len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0
+	help := "\n[j/k] navigate  [enter] drill"
+	if m.current != m.root {
+		help += "  [h] parent"
+	}
+	if hasEmbeds {
+		if m.hasRendered && len(m.replies[m.cursor].Post.Embeds) > 1 {
+			help += "  [←/→] images"
+		}
+		help += "  [a] attachments  [o] open"
+	}
+	help += "  [esc] to feed  [q] quit\n"
+	b.WriteString(help)
+
+	return tea.NewView(b.String())
+}

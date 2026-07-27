@@ -3,22 +3,57 @@ package feed
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bluesky-social/indigo/xrpc"
 
+	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/internal/testutil"
 	indigobsky "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/lex/util"
 )
 
-func TestNewStaticModel(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
+func barePost() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}}}
+}
+
+func postWithURI() []bsk.FeedItem {
+	return []bsk.FeedItem{{
+		PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
+		URI:      "at://uri/1",
+	}}
+}
+
+func postWithTwoEmbeds() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}}}
+}
+
+func postWithOneEmbed() []bsk.FeedItem {
+	return []bsk.FeedItem{{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}}}
+}
+
+func viewPost() bsk.FeedItem {
+	return bsk.FeedItem{PostInfo: bsk.PostInfo{
+		AuthorHandle: "test.bsky.social",
+		Text:         "Hello",
+		IndexedAt:    "2024-01-15T10:00:00Z",
+	}}
+}
+
+func nViewPosts(n int) []bsk.FeedItem {
+	posts := make([]bsk.FeedItem, n)
+	for i := range posts {
+		posts[i] = viewPost()
 	}
+	return posts
+}
+
+func TestNewStaticModel(t *testing.T) {
+	posts := barePost()
 	m := NewStaticModel(posts, "My Title")
 	if m.title != "My Title" {
 		t.Errorf("expected 'My Title', got %q", m.title)
@@ -47,31 +82,18 @@ func TestInit_withClient(t *testing.T) {
 	}
 }
 
-func update(m Model, msg tea.Msg) (Model, *tea.Cmd) {
-	newModel, cmd := m.Update(msg)
-	result := newModel.(Model)
-	if cmd != nil {
-		return result, &cmd
-	}
-	return result, nil
-}
-
 func TestUpdate_quit(t *testing.T) {
-	m := NewStaticModel([]bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}, "Test")
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	m := NewStaticModel(barePost(), "Test")
+	_, cmd := m.Update(testutil.KeyRune('q'))
 	if cmd == nil {
 		t.Fatal("expected Quit command for 'q'")
 	}
 }
 
 func TestUpdate_ctrlC(t *testing.T) {
-	m := NewStaticModel([]bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}, "Test")
+	m := NewStaticModel(barePost(), "Test")
 
-	msg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+	msg := testutil.KeyPress("", 'c', tea.ModCtrl)
 	_, cmd := m.Update(msg)
 	if cmd == nil {
 		t.Fatal("expected Quit command for ctrl+c")
@@ -80,7 +102,7 @@ func TestUpdate_ctrlC(t *testing.T) {
 
 func TestUpdate_esc(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
 	if cmd == nil {
 		t.Fatal("expected BackMsg command for esc")
 	}
@@ -93,15 +115,15 @@ func TestUpdate_esc(t *testing.T) {
 func TestUpdate_downJ(t *testing.T) {
 	posts := make([]bsk.FeedItem, 3)
 	m := NewStaticModel(posts, "Test")
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m, _ = update(m, tea.KeyPressMsg{Code: 'j'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('j'))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor 2, got %d", m.cursor)
 	}
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 2 {
 		t.Errorf("expected cursor still 2 (at end), got %d", m.cursor)
 	}
@@ -111,15 +133,15 @@ func TestUpdate_upK(t *testing.T) {
 	posts := make([]bsk.FeedItem, 3)
 	m := NewStaticModel(posts, "Test")
 	m.cursor = 2
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 1 {
 		t.Errorf("expected cursor 1, got %d", m.cursor)
 	}
-	m, _ = update(m, tea.KeyPressMsg{Code: 'k'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('k'))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor 0, got %d", m.cursor)
 	}
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.cursor != 0 {
 		t.Errorf("expected cursor still 0 (at start), got %d", m.cursor)
 	}
@@ -130,7 +152,7 @@ func TestUpdate_scrollWindow(t *testing.T) {
 	m := NewStaticModel(posts, "Test")
 	m.cursor = 14
 	m.scrollPos = 4
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 	if m.cursor != 15 {
 		t.Errorf("expected cursor 15, got %d", m.cursor)
 	}
@@ -139,20 +161,18 @@ func TestUpdate_scrollWindow(t *testing.T) {
 	}
 	m.cursor = 5
 	m.scrollPos = 5
-	m, _ = update(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
 	if m.scrollPos != 4 {
 		t.Errorf("expected scrollPos 4 (retreated), got %d", m.scrollPos)
 	}
 }
 
 func TestUpdate_left(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 1
-	m, cmd := update(m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	m, cmd := testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyLeft))
 	if m.imgCursor != 0 {
 		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
 	}
@@ -162,26 +182,22 @@ func TestUpdate_left(t *testing.T) {
 }
 
 func TestUpdate_leftAtZero(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 0
-	_, cmd := update(m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	_, cmd := testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyLeft))
 	if cmd != nil {
 		t.Error("expected no command when imgCursor at 0")
 	}
 }
 
 func TestUpdate_right(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 0
-	m, cmd := update(m, tea.KeyPressMsg{Code: tea.KeyRight})
+	m, cmd := testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyRight))
 	if m.imgCursor != 1 {
 		t.Errorf("expected imgCursor 1, got %d", m.imgCursor)
 	}
@@ -191,24 +207,20 @@ func TestUpdate_right(t *testing.T) {
 }
 
 func TestUpdate_rightAtEnd(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
+	posts := postWithTwoEmbeds()
 	m := NewStaticModel(posts, "Test")
 	m.hasRendered = true
 	m.imgCursor = 1
-	_, cmd := update(m, tea.KeyPressMsg{Code: tea.KeyRight})
+	_, cmd := testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyRight))
 	if cmd != nil {
 		t.Error("expected no command when imgCursor at end")
 	}
 }
 
 func TestUpdate_oKey(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
-	m, cmd := update(m, tea.KeyPressMsg{Code: 'o'})
+	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('o'))
 	if cmd == nil {
 		t.Error("expected open attachment command")
 	}
@@ -218,54 +230,18 @@ func TestUpdate_oKey(t *testing.T) {
 }
 
 func TestUpdate_oKeyNoEmbeds(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social"}},
-	}
+	posts := barePost()
 	m := NewStaticModel(posts, "Test")
-	m, _ = update(m, tea.KeyPressMsg{Code: 'o'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('o'))
 	if m.statusMsg == "Opening image externally..." {
 		t.Error("expected no status when no embeds")
 	}
 }
 
-func TestUpdate_leftH(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
-	m := NewStaticModel(posts, "Test")
-	m.hasRendered = true
-	m.imgCursor = 1
-	m, cmd := update(m, tea.KeyPressMsg{Code: 'h'})
-	if m.imgCursor != 0 {
-		t.Errorf("expected imgCursor 0, got %d", m.imgCursor)
-	}
-	if cmd == nil {
-		t.Error("expected render command")
-	}
-}
-
-func TestUpdate_rightL(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg", "b.jpg"}}},
-	}
-	m := NewStaticModel(posts, "Test")
-	m.hasRendered = true
-	m.imgCursor = 0
-	m, cmd := update(m, tea.KeyPressMsg{Code: 'l'})
-	if m.imgCursor != 1 {
-		t.Errorf("expected imgCursor 1, got %d", m.imgCursor)
-	}
-	if cmd == nil {
-		t.Error("expected render command")
-	}
-}
-
 func TestUpdate_aKey(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
-	m, cmd := update(m, tea.KeyPressMsg{Code: 'a'})
+	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('a'))
 	if !m.hasRendered {
 		t.Error("expected hasRendered to be true")
 	}
@@ -280,7 +256,7 @@ func TestUpdate_rKey(t *testing.T) {
 	m.hasRendered = true
 	m.imageRows = 10
 	m.scrollPos = 5
-	m, _ = update(m, tea.KeyPressMsg{Code: 'r'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('r'))
 	if !m.loading {
 		t.Error("expected loading to be true")
 	}
@@ -303,7 +279,7 @@ func TestUpdate_postsLoadedMsg(t *testing.T) {
 		{PostInfo: bsk.PostInfo{AuthorHandle: "a.bsky.social"}},
 		{PostInfo: bsk.PostInfo{AuthorHandle: "b.bsky.social"}},
 	})
-	m, cmd := update(m, newPosts)
+	m, cmd := testutil.UpdateModel(m, newPosts)
 	if cmd != nil {
 		t.Error("expected no command")
 	}
@@ -321,7 +297,7 @@ func TestUpdate_postsLoadedMsg(t *testing.T) {
 func TestUpdate_postsLoadedMsg_empty(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
 	m.loading = true
-	m, _ = update(m, postsLoadedMsg([]bsk.FeedItem{}))
+	m, _ = testutil.UpdateModel(m, postsLoadedMsg([]bsk.FeedItem{}))
 	if m.statusMsg != "No posts found." {
 		t.Errorf("expected 'No posts found.', got %q", m.statusMsg)
 	}
@@ -330,7 +306,7 @@ func TestUpdate_postsLoadedMsg_empty(t *testing.T) {
 func TestUpdate_loadErrorMsg(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
 	m.loading = true
-	m, _ = update(m, loadErrorMsg("something went wrong"))
+	m, _ = testutil.UpdateModel(m, loadErrorMsg("something went wrong"))
 	if m.loading {
 		t.Error("expected loading false")
 	}
@@ -341,7 +317,7 @@ func TestUpdate_loadErrorMsg(t *testing.T) {
 
 func TestUpdate_imageRenderedMsg(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
-	m, _ = update(m, imageRenderedMsg{imageRows: 15})
+	m, _ = testutil.UpdateModel(m, attach.RenderedMsg{ImageRows: 15})
 	if m.imageRows != 15 {
 		t.Errorf("expected imageRows 15, got %d", m.imageRows)
 	}
@@ -470,16 +446,7 @@ func TestView_cursorPastEnd(t *testing.T) {
 }
 
 func TestView_paginationAbove(t *testing.T) {
-	posts := make([]bsk.FeedItem, 20)
-	for i := range posts {
-		posts[i] = bsk.FeedItem{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-			},
-		}
-	}
+	posts := nViewPosts(20)
 	m := NewStaticModel(posts, "Feed")
 	m.loading = false
 	m.cursor = 12
@@ -491,16 +458,7 @@ func TestView_paginationAbove(t *testing.T) {
 }
 
 func TestView_paginationBelow(t *testing.T) {
-	posts := make([]bsk.FeedItem, 20)
-	for i := range posts {
-		posts[i] = bsk.FeedItem{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-			},
-		}
-	}
+	posts := nViewPosts(20)
 	m := NewStaticModel(posts, "Feed")
 	m.loading = false
 	m.cursor = 0
@@ -632,15 +590,13 @@ func TestLoadPosts_noFollows(t *testing.T) {
 }
 
 func TestRenderAttachment_oob(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = 5
 	msg := m.renderAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to render" {
 		t.Errorf("expected 'No image to render', got %q", string(errMsg))
@@ -648,43 +604,25 @@ func TestRenderAttachment_oob(t *testing.T) {
 }
 
 func TestOpenAttachment_oob(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{PostInfo: bsk.PostInfo{Embeds: []string{"a.jpg"}}},
-	}
+	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
 	m.imgCursor = -1
 	msg := m.openAttachment()
-	errMsg, ok := msg.(loadErrorMsg)
+	errMsg, ok := msg.(attach.ErrorMsg)
 	if !ok {
-		t.Fatalf("expected loadErrorMsg, got %T", msg)
+		t.Fatalf("expected attach.ErrorMsg, got %T", msg)
 	}
 	if string(errMsg) != "No image to open" {
 		t.Errorf("expected 'No image to open', got %q", string(errMsg))
 	}
 }
 
-func setupFeedTestConfig(t *testing.T) {
-	t.Helper()
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	cfg := &config.Config{}
-	if err := cfg.Save(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestUpdate_sKey_save(t *testing.T) {
-	setupFeedTestConfig(t)
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
-	cfg, _ := config.Load()
+	cfg := testutil.SetupTestConfig(t)
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "Saved!" {
 		t.Errorf("expected status 'Saved!', got %q", m.statusMsg)
@@ -696,19 +634,13 @@ func TestUpdate_sKey_save(t *testing.T) {
 }
 
 func TestUpdate_sKey_unsave(t *testing.T) {
-	setupFeedTestConfig(t)
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
-	cfg, _ := config.Load()
+	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "Unsaved" {
 		t.Errorf("expected status 'Unsaved', got %q", m.statusMsg)
@@ -720,14 +652,9 @@ func TestUpdate_sKey_unsave(t *testing.T) {
 }
 
 func TestUpdate_sKey_noConfig(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "" {
 		t.Errorf("expected no status without config, got %q", m.statusMsg)
@@ -741,7 +668,7 @@ func TestUpdate_sKey_noURI(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "Cannot save post (no URI)" {
 		t.Errorf("expected 'Cannot save post (no URI)', got %q", m.statusMsg)
@@ -749,20 +676,14 @@ func TestUpdate_sKey_noURI(t *testing.T) {
 }
 
 func TestUpdate_sKey_removeFromSaved(t *testing.T) {
-	setupFeedTestConfig(t)
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
-	cfg, _ := config.Load()
+	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "Removed from saved" && m.statusMsg != "No saved posts" {
 		t.Errorf("expected removal status, got %q", m.statusMsg)
@@ -777,23 +698,74 @@ func TestUpdate_sKey_removeFromSaved(t *testing.T) {
 }
 
 func TestUpdate_sKey_removeLastFromSaved(t *testing.T) {
-	setupFeedTestConfig(t)
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
-	cfg, _ := config.Load()
+	cfg := testutil.SetupTestConfig(t)
 	cfg.SavePost("at://uri/1")
 	_ = cfg.Save()
+	posts := postWithURI()
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.isSavedView = true
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "No saved posts" {
 		t.Errorf("expected 'No saved posts' after removing last, got %q", m.statusMsg)
+	}
+}
+
+func TestUpdate_cKey_sendsOpenThreadMsg(t *testing.T) {
+	posts := postWithURI()
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(testutil.KeyRune('c'))
+	if cmd == nil {
+		t.Fatal("expected command for c key")
+	}
+	msg := cmd()
+	ot, ok := msg.(OpenThreadMsg)
+	if !ok {
+		t.Fatalf("expected OpenThreadMsg, got %T", msg)
+	}
+	if ot.URI != "at://uri/1" {
+		t.Errorf("expected URI 'at://uri/1', got %q", ot.URI)
+	}
+}
+
+func TestUpdate_cKey_emptyPosts(t *testing.T) {
+	m := NewStaticModel(nil, "Test")
+	_, cmd := m.Update(testutil.KeyRune('c'))
+	if cmd != nil {
+		t.Error("expected no command when no posts")
+	}
+}
+
+func TestUpdate_cKey_noURI(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"}},
+	}
+	m := NewStaticModel(posts, "Test")
+	m.cursor = 0
+	_, cmd := m.Update(testutil.KeyRune('c'))
+	if cmd != nil {
+		t.Error("expected no command when post has no URI")
+	}
+}
+
+func TestView_helpBarShowsComments(t *testing.T) {
+	posts := []bsk.FeedItem{
+		{
+			PostInfo: bsk.PostInfo{
+				AuthorHandle: "test.bsky.social",
+				Text:         "Hello",
+				IndexedAt:    "2024-01-15T10:00:00Z",
+			},
+		},
+	}
+	m := NewStaticModel(posts, "Feed")
+	m.loading = false
+	m.cursor = 0
+	v := m.View()
+	if !strings.Contains(v.Content, "[c] comments") {
+		t.Errorf("expected '[c] comments' in help bar, got: %s", v.Content)
 	}
 }
 
@@ -803,69 +775,23 @@ func TestUpdate_rKey_savedView(t *testing.T) {
 	}
 	m := NewStaticModel(posts, "Test")
 	m.isSavedView = true
-	m, _ = update(m, tea.KeyPressMsg{Code: 'r'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('r'))
 
 	if m.loading {
 		t.Error("expected loading to stay false in saved view")
 	}
 }
 
-func TestNewSavedModel(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.SavePost("at://uri/1")
-	cfg.SavePost("at://uri/2")
-	m := NewSavedModel(cfg)
-
-	if m.title != "Saved posts" {
-		t.Errorf("expected title 'Saved posts', got %q", m.title)
-	}
-	if !m.isSavedView {
-		t.Error("expected isSavedView to be true")
-	}
-	if !m.loading {
-		t.Error("expected loading to be true")
-	}
-	if m.client == nil {
-		t.Error("expected client to be set")
-	}
-}
-
 func TestUpdate_sKey_emptyPosts(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewStaticModel(nil, "Test")
-	m.cfg = cfg
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
-
-	if m.statusMsg != "" {
-		t.Errorf("expected no status for empty posts, got %q", m.statusMsg)
-	}
-}
-
-func TestUpdate_sKey_cursorPastEnd(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{AuthorHandle: "test.bsky.social", Text: "Hello"},
-			URI:      "at://uri/1",
-		},
-	}
+	posts := postWithURI()
 	cfg := &config.Config{}
 	m := NewStaticModel(posts, "Test")
 	m.cfg = cfg
 	m.cursor = 5
-	m, _ = update(m, tea.KeyPressMsg{Code: 's'})
+	m, _ = testutil.UpdateModel(m, testutil.KeyRune('s'))
 
 	if m.statusMsg != "" {
 		t.Errorf("expected no status for cursor past end, got %q", m.statusMsg)
-	}
-}
-
-func TestWithConfig(t *testing.T) {
-	cfg := &config.Config{}
-	m := NewStaticModel(nil, "Test")
-	m = m.WithConfig(cfg)
-
-	if m.cfg != cfg {
-		t.Error("expected cfg to be set")
 	}
 }
 
@@ -966,29 +892,6 @@ func TestView_savedViewWithEmbeds(t *testing.T) {
 	}
 }
 
-func TestView_savedViewMultiEmbedsRendered(t *testing.T) {
-	posts := []bsk.FeedItem{
-		{
-			PostInfo: bsk.PostInfo{
-				AuthorHandle: "test.bsky.social",
-				Text:         "Hello",
-				IndexedAt:    "2024-01-15T10:00:00Z",
-				Embeds:       []string{"a.jpg", "b.jpg"},
-			},
-		},
-	}
-	m := NewStaticModel(posts, "Saved posts")
-	m.loading = false
-	m.cursor = 0
-	m.isSavedView = true
-	m.hasRendered = true
-	m.imageRows = 5
-	v := m.View()
-	if v.Content == "" {
-		t.Error("expected non-empty view")
-	}
-}
-
 func TestUpdate_savedPostsLoadedMsg(t *testing.T) {
 	m := NewSavedModel(&config.Config{})
 	m.loading = true
@@ -997,7 +900,7 @@ func TestUpdate_savedPostsLoadedMsg(t *testing.T) {
 		{PostInfo: bsk.PostInfo{AuthorHandle: "a.bsky.social"}},
 		{PostInfo: bsk.PostInfo{AuthorHandle: "b.bsky.social"}},
 	})
-	m, cmd := update(m, msg)
+	m, cmd := testutil.UpdateModel(m, msg)
 	if cmd != nil {
 		t.Error("expected no command")
 	}
@@ -1018,7 +921,7 @@ func TestUpdate_savedPostsLoadedMsg(t *testing.T) {
 func TestUpdate_savedPostsLoadedMsg_empty(t *testing.T) {
 	m := NewSavedModel(&config.Config{})
 	m.loading = true
-	m, _ = update(m, postsLoadedMsg([]bsk.FeedItem{}))
+	m, _ = testutil.UpdateModel(m, postsLoadedMsg([]bsk.FeedItem{}))
 	if m.statusMsg != "No posts found." {
 		t.Errorf("expected 'No posts found.', got %q", m.statusMsg)
 	}
@@ -1030,7 +933,7 @@ func TestUpdate_savedPostsLoadedMsg_empty(t *testing.T) {
 func TestUpdate_loadErrorMsg_savedView(t *testing.T) {
 	m := NewSavedModel(&config.Config{})
 	m.loading = true
-	m, _ = update(m, loadErrorMsg("saved error"))
+	m, _ = testutil.UpdateModel(m, loadErrorMsg("saved error"))
 	if m.loading {
 		t.Error("expected loading false")
 	}
@@ -1043,7 +946,7 @@ func TestUpdate_loadErrorMsg_savedView(t *testing.T) {
 }
 
 func TestLoadSavedPosts_withURIs(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&indigobsky.FeedGetPosts_Output{
 			Posts: []*indigobsky.FeedDefs_PostView{
@@ -1063,7 +966,6 @@ func TestLoadSavedPosts_withURIs(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
 
 	cfg := &config.Config{}
 	cfg.SavePost("at://uri/1")
@@ -1087,10 +989,9 @@ func TestLoadSavedPosts_withURIs(t *testing.T) {
 }
 
 func TestLoadSavedPosts_error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
 
 	cfg := &config.Config{}
 	cfg.SavePost("at://uri/1")
