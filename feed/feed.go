@@ -39,6 +39,8 @@ type Model struct {
 	imageRows   int
 	title       string
 	isSavedView bool
+	width       int
+	height      int
 }
 
 func NewModel() (Model, error) {
@@ -52,6 +54,8 @@ func NewModel() (Model, error) {
 		loading:  true,
 		pageSize: utils.DefaultPageSize,
 		title:    "Feed",
+		width:    utils.DefaultWidth,
+		height:   24,
 	}, nil
 }
 
@@ -60,6 +64,8 @@ func NewStaticModel(posts []bsk.FeedItem, title string) Model {
 		posts:    posts,
 		pageSize: utils.DefaultPageSize,
 		title:    title,
+		width:    utils.DefaultWidth,
+		height:   24,
 	}
 }
 
@@ -76,6 +82,8 @@ func NewSavedModel(cfg *config.Config) Model {
 		pageSize:    utils.DefaultPageSize,
 		title:       "Saved posts",
 		isSavedView: true,
+		width:       utils.DefaultWidth,
+		height:      24,
 	}
 }
 
@@ -133,6 +141,10 @@ func (m Model) loadSavedPosts() tea.Msg {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.pageSize = utils.PageSize(msg.Height)
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
