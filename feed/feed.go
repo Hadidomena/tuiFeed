@@ -323,7 +323,7 @@ func (m Model) openAttachment() tea.Msg {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	utils.WriteHeader(&b, m.title, 30)
+	utils.WriteHeader(&b, m.title, m.width)
 
 	if m.loading {
 		if m.isSavedView {
@@ -378,5 +378,5 @@ func (m Model) View() tea.View {
 	} else {
 		b.WriteString("\n[c] comments  [s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
 	}
-	return tea.NewView(b.String())
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }

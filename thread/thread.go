@@ -203,22 +203,22 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 
 	if m.statusMsg != "" && m.root == nil {
-		utils.WriteHeader(&b, "Comments", 30)
+		utils.WriteHeader(&b, "Comments", m.width)
 		b.WriteString(m.statusMsg + "\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
 	if m.loading {
 		b.WriteString("Loading comments...\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
 	if m.root == nil {
 		b.WriteString("No thread data.\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
-	utils.WriteHeader(&b, "Comments", 30)
+	utils.WriteHeader(&b, "Comments", m.width)
 
 	const maxBreadcrumb = 5
 	if len(m.breadcrumb) > maxBreadcrumb {
@@ -282,5 +282,5 @@ func (m Model) View() tea.View {
 	help += "  [esc] to feed  [q] quit\n"
 	b.WriteString(help)
 
-	return tea.NewView(b.String())
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }

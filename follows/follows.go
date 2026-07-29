@@ -144,8 +144,7 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("Followed Accounts\n")
-	b.WriteString(strings.Repeat("─", 40) + "\n\n")
+	utils.WriteHeader(&b, "Followed Accounts", m.width)
 
 	if len(m.cfg.Follows) == 0 {
 		b.WriteString("  No accounts followed yet.\n")
@@ -171,5 +170,5 @@ func (m Model) View() tea.View {
 	}
 
 	b.WriteString("\n[a] add  [d] delete  [esc] back\n")
-	return tea.NewView(b.String())
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }
