@@ -95,16 +95,17 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m DashboardModel) View() tea.View {
-	s := "Bluesky TUI Feed\n\n"
+	var b strings.Builder
+	b.WriteString("Bluesky TUI Feed\n\n")
 	for i, choice := range m.choices {
 		cursor := "  "
 		if m.cursor == i {
 			cursor = "> "
 		}
-		s += fmt.Sprintf("%s  %s\n", cursor, choice)
+		b.WriteString(fmt.Sprintf("%s  %s\n", cursor, choice))
 	}
-	s += "\nPress q to quit.\n"
-	return tea.NewView(s)
+	b.WriteString("\nPress q to quit.\n")
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }
 
 type AccountSelectModel struct {
@@ -156,8 +157,7 @@ func (m AccountSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m AccountSelectModel) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("Posts since last check\n")
-	b.WriteString(strings.Repeat("\u2500", 40) + "\n\n")
+	utils.WriteHeader(&b, "Posts since last check", m.width)
 
 	if len(m.accounts) == 0 {
 		b.WriteString("  No accounts followed.\n")
@@ -179,7 +179,7 @@ func (m AccountSelectModel) View() tea.View {
 	}
 
 	b.WriteString("\n[\u2191/\u2193] navigate  [enter] select  [esc] back\n")
-	return tea.NewView(b.String())
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }
 
 type LoadingModel struct {
@@ -204,7 +204,8 @@ func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m LoadingModel) View() tea.View {
-	return tea.NewView(fmt.Sprintf("\n  %s\n\n", m.message))
+	s := fmt.Sprintf("\n  %s\n\n", m.message)
+	return tea.NewView(utils.CenterBlock(s, m.width))
 }
 
 type MainModel struct {

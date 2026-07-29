@@ -96,7 +96,27 @@ func ScrollUp(cursor, scrollPos int) (int, int) {
 	return cursor, scrollPos
 }
 
-func WriteHeader(b *strings.Builder, title string, width int) {
+func CenterBlock(s string, termWidth int) string {
+	lines := strings.Split(s, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		if len(line) > maxWidth {
+			maxWidth = len(line)
+		}
+	}
+	leftPad := (termWidth - maxWidth) / 2
+	if leftPad <= 0 {
+		return s
+	}
+	pad := strings.Repeat(" ", leftPad)
+	for i, line := range lines {
+		lines[i] = pad + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func WriteHeader(b *strings.Builder, title string, termWidth int) {
+	width := ContentWidth(termWidth)
 	b.WriteString(title + "\n")
 	b.WriteString(strings.Repeat("─", width))
 	b.WriteString("\n\n")
