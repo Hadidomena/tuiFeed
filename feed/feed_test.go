@@ -241,6 +241,7 @@ func TestUpdate_oKeyNoEmbeds(t *testing.T) {
 func TestUpdate_aKey(t *testing.T) {
 	posts := postWithOneEmbed()
 	m := NewStaticModel(posts, "Test")
+	m.height = 40
 	m, cmd := testutil.UpdateModel(m, testutil.KeyRune('a'))
 	if !m.hasRendered {
 		t.Error("expected hasRendered to be true")

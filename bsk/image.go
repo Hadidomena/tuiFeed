@@ -56,13 +56,13 @@ func DetectImageProtocol() ImageProto {
 	return detectedProto
 }
 
-func RenderTerminalImage(data []byte, yOffset int) (int, error) {
+func RenderTerminalImage(data []byte, yOffset int, maxCols int, maxRows int) (int, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return 0, fmt.Errorf("decode failed: %w", err)
 	}
 
-	img = resizeToFit(img, 40, 18)
+	img = resizeToFit(img, maxCols, maxRows)
 
 	proto := DetectImageProtocol()
 

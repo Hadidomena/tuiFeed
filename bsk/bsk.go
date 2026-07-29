@@ -243,7 +243,7 @@ func FormatPost(item FeedItem, imgCursor int) string {
 	return b.String()
 }
 
-func RenderImage(url string, yOffset int) (int, error) {
+func RenderImage(url string, yOffset int, maxCols int, maxRows int) (int, error) {
 	data, err := utils.DownloadURL(url)
 	if err != nil {
 		return 0, err
@@ -254,7 +254,7 @@ func RenderImage(url string, yOffset int) (int, error) {
 		return 0, fmt.Errorf("not an image: %s", ct)
 	}
 
-	return RenderTerminalImage(data, yOffset)
+	return RenderTerminalImage(data, yOffset, maxCols, maxRows)
 }
 
 func int64Val(p *int64) int64 {

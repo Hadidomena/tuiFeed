@@ -10,6 +10,7 @@ import (
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/internal/testutil"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type testError struct{ msg string }
@@ -44,6 +45,8 @@ func defaultModel(root *bsk.ThreadNode, opts ...modelOption) Model {
 		replies:    root.Replies,
 		breadcrumb: []string{"@" + root.Post.AuthorHandle},
 		pageSize:   10,
+		width:      utils.DefaultWidth,
+		height:     40,
 	}
 	for _, opt := range opts {
 		opt(&m)

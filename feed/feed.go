@@ -189,6 +189,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "a":
 			if m.cursor < len(m.posts) && len(m.posts[m.cursor].Embeds) > 0 {
+				yOff := m.computeYOffset()
+				if attach.ComputeMaxRows(m.height, yOff) <= 0 {
+					m.statusMsg = "Not enough room. Resize terminal taller or scroll up."
+					return m, nil
+				}
 				m.imgCursor = 0
 				m.hasRendered = true
 				return m, m.renderAttachment
@@ -308,11 +313,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) renderAttachment() tea.Msg {
-	post := m.posts[m.cursor]
-	postText := bsk.FormatPost(post, m.imgCursor)
-	postLines := strings.Count(postText, "\n")
-	yOffset := 5 + postLines
-	return attach.Render(post.Embeds, m.imgCursor, yOffset)
+	if len(m.posts) == 0 || m.cursor >= len(m.posts) {
+		return attach.ErrorMsg("No post selected")
+	}
+	yOffset := m.computeYOffset()
+	maxCols := attach.ComputeMaxCols(m.width)
+	maxRows := attach.ComputeMaxRows(m.height, yOffset)
+	return attach.Render(m.posts[m.cursor].Embeds, m.imgCursor, yOffset, maxCols, maxRows)
+}
+
+func (m Model) computeYOffset() int {
+	if len(m.posts) == 0 {
+		return 4
+	}
+
+	lines := 0
+
+	lines += 3
+
+	lines += 2
+
+	end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.posts))
+	for i := m.scrollPos; i < end; i++ {
+		lines += strings.Count(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i), "\n")
+		lines += 1
+	}
+
+	if m.scrollPos > 0 {
+		lines += 1
+	}
+	if end < len(m.posts) {
+		lines += 1
+	}
+
+	lines += 2
+
+	idx := m.cursor
+	if idx >= len(m.posts) {
+		idx = 0
+	}
+	postText := bsk.FormatPost(m.posts[idx], -1)
+	lines += strings.Count(postText, "\n")
+
+	return lines
 }
 
 func (m Model) openAttachment() tea.Msg {

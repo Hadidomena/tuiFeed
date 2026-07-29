@@ -150,6 +150,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "a":
 			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				yOff := m.computeYOffset()
+				if attach.ComputeMaxRows(m.height, yOff) <= 0 {
+					m.statusMsg = "Not enough room. Resize terminal taller or scroll up."
+					return m, nil
+				}
 				m.imgCursor = 0
 				m.hasRendered = true
 				return m, m.renderAttachment
@@ -187,11 +192,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) renderAttachment() tea.Msg {
-	reply := m.replies[m.cursor]
-	postText := bsk.FormatPost(bsk.FeedItem{PostInfo: reply.Post, URI: reply.URI}, m.imgCursor)
-	postLines := strings.Count(postText, "\n")
-	yOffset := 6 + postLines
-	return attach.Render(reply.Post.Embeds, m.imgCursor, yOffset)
+	if len(m.replies) == 0 || m.cursor >= len(m.replies) {
+		return attach.ErrorMsg("No reply selected")
+	}
+	yOffset := m.computeYOffset()
+	maxCols := attach.ComputeMaxCols(m.width)
+	maxRows := attach.ComputeMaxRows(m.height, yOffset)
+	return attach.Render(m.replies[m.cursor].Post.Embeds, m.imgCursor, yOffset, maxCols, maxRows)
+}
+
+func (m Model) computeYOffset() int {
+	if m.root == nil {
+		return 4
+	}
+
+	lines := 0
+
+	lines += 3
+
+	const maxBreadcrumb = 5
+	breadcrumbLine := strings.Join(m.breadcrumb, " > ")
+	if len(m.breadcrumb) > maxBreadcrumb {
+		breadcrumbLine = "... > " + strings.Join(m.breadcrumb[len(m.breadcrumb)-maxBreadcrumb:], " > ")
+	}
+	lines += 1 + strings.Count(breadcrumbLine, "\n")
+	lines += 1
+
+	if len(m.replies) == 0 {
+		lines += 1
+	} else {
+		lines += 2
+
+		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
+		for i := m.scrollPos; i < end; i++ {
+			reply := m.replies[i]
+			itemStr := bsk.FormatPostListItem(reply.Post, m.cursor == i)
+			lines += strings.Count(itemStr, "\n")
+			if len(reply.Replies) > 0 {
+				lines += 1
+			}
+			lines += 1
+		}
+
+		if m.scrollPos > 0 {
+			lines += 1
+		}
+		if end < len(m.replies) {
+			lines += 1
+		}
+
+		lines += 2
+
+		idx := m.cursor
+		if idx >= len(m.replies) {
+			idx = 0
+		}
+		postText := bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1)
+		lines += strings.Count(postText, "\n")
+	}
+
+	return lines
 }
 
 func (m Model) openAttachment() tea.Msg {

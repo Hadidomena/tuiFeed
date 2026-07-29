@@ -1009,7 +1009,7 @@ func TestRenderImage_downloadError(t *testing.T) {
 	}))
 	server.Close()
 
-	_, err := RenderImage(server.URL+"/nonexistent", 0)
+	_, err := RenderImage(server.URL+"/nonexistent", 0, 40, 18)
 	if err == nil {
 		t.Fatal("expected download error")
 	}
@@ -1024,7 +1024,7 @@ func TestRenderImage_notAnImage(t *testing.T) {
 		}
 	}))
 
-	_, err := RenderImage(server.URL, 0)
+	_, err := RenderImage(server.URL, 0, 40, 18)
 	if err == nil {
 		t.Fatal("expected 'not an image' error")
 	}
@@ -1039,7 +1039,7 @@ func TestRenderImage_decodeError(t *testing.T) {
 		}
 	}))
 
-	_, err := RenderImage(server.URL, 0)
+	_, err := RenderImage(server.URL, 0, 40, 18)
 	if err == nil {
 		t.Fatal("expected decode error for invalid image data")
 	}
