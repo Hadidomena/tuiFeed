@@ -76,7 +76,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.pageSize = utils.PageSize(msg.Height)
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -195,7 +194,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = string(msg)
 	}
 
+	m = m.recalcPageSize()
 	return m, nil
+}
+
+func (m Model) recalcPageSize() Model {
+	if m.height <= 0 || m.root == nil || len(m.replies) == 0 {
+		return m
+	}
+
+	cw := utils.ContentWidth(m.width)
+
+	fixedBefore := 6
+
+	idx := m.cursor
+	if idx >= len(m.replies) {
+		idx = 0
+	}
+	postText := bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1, cw)
+	postLines := strings.Count(postText, "\n")
+
+	afterList := 2 + postLines + m.imageRows + 2
+	if m.statusMsg != "" {
+		afterList += 1
+	}
+
+	available := m.height - fixedBefore - afterList
+	if available < 4 {
+		m.pageSize = 1
+	} else {
+		m.pageSize = available / 4
+	}
+	if m.pageSize < 1 {
+		m.pageSize = 1
+	}
+	return m
 }
 
 func (m Model) renderAttachment() tea.Msg {

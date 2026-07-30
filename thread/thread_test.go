@@ -506,8 +506,8 @@ func TestUpdate_scrollAdvances(t *testing.T) {
 		m = r.(Model)
 	}
 
-	if m.scrollPos != 1 {
-		t.Errorf("expected scrollPos 1 after 10 j presses, got %d", m.scrollPos)
+	if m.scrollPos != 5 {
+		t.Errorf("expected scrollPos 5 after 10 j presses, got %d", m.scrollPos)
 	}
 	if m.cursor != 10 {
 		t.Errorf("expected cursor 10 after 10 j presses, got %d", m.cursor)

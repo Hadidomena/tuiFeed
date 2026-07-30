@@ -151,7 +151,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.pageSize = utils.PageSize(msg.Height)
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -249,6 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "No saved posts"
 				}
 				m.cfg = fresh
+				m = m.recalcPageSize()
 				return m, nil
 			}
 			if m.cfg.IsSaved(uri) {
@@ -316,7 +316,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = msg.Status
 	}
 
+	m = m.recalcPageSize()
 	return m, nil
+}
+
+func (m Model) recalcPageSize() Model {
+	if m.height <= 0 || len(m.posts) == 0 {
+		m.pageSize = utils.DefaultPageSize
+		return m
+	}
+
+	fixedBefore := 5
+
+	idx := m.cursor
+	if idx >= len(m.posts) {
+		idx = 0
+	}
+	cw := utils.ContentWidth(m.width)
+	postText := bsk.FormatPost(m.posts[idx], -1, cw)
+	postLines := strings.Count(postText, "\n")
+
+	afterList := 2 + postLines + m.imageRows + 2
+	if m.statusMsg != "" {
+		afterList += 1
+	}
+
+	available := m.height - fixedBefore - afterList
+	if available < 4 {
+		m.pageSize = 1
+	} else {
+		m.pageSize = available / 4
+	}
+	if m.pageSize < 1 {
+		m.pageSize = 1
+	}
+	return m
 }
 
 func (m Model) renderAttachment() tea.Msg {
