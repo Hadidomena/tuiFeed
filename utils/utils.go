@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
 const DefaultPageSize = 10
@@ -97,22 +99,61 @@ func ScrollUp(cursor, scrollPos int) (int, int) {
 }
 
 func CenterBlock(s string, termWidth int) string {
-	lines := strings.Split(s, "\n")
-	maxWidth := 0
-	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
-		}
-	}
-	leftPad := (termWidth - maxWidth) / 2
+	cw := ContentWidth(termWidth)
+	leftPad := (termWidth - cw) / 2
 	if leftPad <= 0 {
 		return s
 	}
 	pad := strings.Repeat(" ", leftPad)
+	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		lines[i] = pad + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+func WrapText(text string, maxWidth int) string {
+	if maxWidth <= 0 || runewidth.StringWidth(text) <= maxWidth {
+		return text
+	}
+	var result strings.Builder
+	paraLines := strings.Split(text, "\n")
+	for pi, para := range paraLines {
+		if pi > 0 {
+			result.WriteString("\n")
+		}
+		result.WriteString(wrapLine(para, maxWidth))
+	}
+	return result.String()
+}
+
+func wrapLine(line string, maxWidth int) string {
+	line = strings.TrimRight(line, " \t")
+	if runewidth.StringWidth(line) <= maxWidth {
+		return line
+	}
+	words := strings.Fields(line)
+	if len(words) == 0 {
+		return line
+	}
+	var b strings.Builder
+	lineLen := 0
+	for i, word := range words {
+		wordWidth := runewidth.StringWidth(word)
+		if i == 0 {
+			b.WriteString(word)
+			lineLen = wordWidth
+		} else if lineLen+1+wordWidth <= maxWidth {
+			b.WriteString(" ")
+			b.WriteString(word)
+			lineLen += 1 + wordWidth
+		} else {
+			b.WriteString("\n")
+			b.WriteString(word)
+			lineLen = wordWidth
+		}
+	}
+	return b.String()
 }
 
 func WriteHeader(b *strings.Builder, title string, termWidth int) {
