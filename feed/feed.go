@@ -74,6 +74,13 @@ func (m Model) WithConfig(cfg *config.Config) Model {
 	return m
 }
 
+func (m Model) WithSize(w, h int) Model {
+	m.width = w
+	m.height = h
+	m.pageSize = utils.PageSize(h)
+	return m
+}
+
 func NewSavedModel(cfg *config.Config) Model {
 	return Model{
 		cfg:         cfg,
@@ -327,6 +334,8 @@ func (m Model) computeYOffset() int {
 		return 4
 	}
 
+	cw := utils.ContentWidth(m.width)
+
 	lines := 0
 
 	lines += 3
@@ -335,7 +344,7 @@ func (m Model) computeYOffset() int {
 
 	end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.posts))
 	for i := m.scrollPos; i < end; i++ {
-		lines += strings.Count(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i), "\n")
+		lines += strings.Count(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i, cw), "\n")
 		lines += 1
 	}
 
@@ -352,7 +361,7 @@ func (m Model) computeYOffset() int {
 	if idx >= len(m.posts) {
 		idx = 0
 	}
-	postText := bsk.FormatPost(m.posts[idx], -1)
+	postText := bsk.FormatPost(m.posts[idx], -1, cw)
 	lines += strings.Count(postText, "\n")
 
 	return lines
@@ -380,12 +389,13 @@ func (m Model) View() tea.View {
 	if len(m.posts) == 0 {
 		b.WriteString("No posts to display.\n")
 	} else {
+		cw := utils.ContentWidth(m.width)
 		b.WriteString(fmt.Sprintf("%d posts\n\n", len(m.posts)))
 
 		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.posts))
 
 		for i := m.scrollPos; i < end; i++ {
-			b.WriteString(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i))
+			b.WriteString(bsk.FormatPostListItem(m.posts[i].PostInfo, m.cursor == i, cw))
 			b.WriteString("\n")
 		}
 
@@ -399,7 +409,7 @@ func (m Model) View() tea.View {
 		if m.hasRendered {
 			cursor = m.imgCursor
 		}
-		b.WriteString(bsk.FormatPost(m.posts[idx], cursor))
+		b.WriteString(bsk.FormatPost(m.posts[idx], cursor, cw))
 	}
 
 	if m.hasRendered && m.imageRows > 0 {

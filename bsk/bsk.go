@@ -221,12 +221,16 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func FormatPost(item FeedItem, imgCursor int) string {
+func FormatPost(item FeedItem, imgCursor int, wrapWidth int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
 	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
 	b.WriteString("\n")
-	b.WriteString(item.Text)
+	if wrapWidth > 0 {
+		b.WriteString(utils.WrapText(item.Text, wrapWidth))
+	} else {
+		b.WriteString(item.Text)
+	}
 	b.WriteString("\n\n")
 
 	if len(item.Embeds) > 0 {
@@ -289,7 +293,7 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 	return posts, nextCursor, nil
 }
 
-func FormatPostListItem(post PostInfo, cursor bool) string {
+func FormatPostListItem(post PostInfo, cursor bool, wrapWidth int) string {
 	var b strings.Builder
 
 	cursorStr := "  "
@@ -314,10 +318,16 @@ func FormatPostListItem(post PostInfo, cursor bool) string {
 		cursorStr, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
 
 	text := strings.TrimSpace(post.Text)
-	if len(text) > 120 {
+	text = strings.ReplaceAll(text, "\n", " ")
+	if wrapWidth > 0 {
+		effectiveWidth := wrapWidth - 4
+		if effectiveWidth < 10 {
+			effectiveWidth = 10
+		}
+		text = utils.WrapText(text, effectiveWidth)
+	} else if len(text) > 120 {
 		text = text[:120] + "..."
 	}
-	text = strings.ReplaceAll(text, "\n", " ")
 	b.WriteString(fmt.Sprintf("    %s\n", text))
 
 	if len(post.Embeds) > 0 {

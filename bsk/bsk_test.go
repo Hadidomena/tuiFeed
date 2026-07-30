@@ -836,7 +836,7 @@ func TestFormatPost(t *testing.T) {
 		},
 		URI: "at://did:plc:test/app.bsky.feed.post/1",
 	}
-	result := FormatPost(item, -1)
+	result := FormatPost(item, -1, 0)
 	if !strings.Contains(result, "Test User") {
 		t.Errorf("expected display name in output")
 	}
@@ -858,7 +858,7 @@ func TestFormatPost_empty(t *testing.T) {
 	item := FeedItem{
 		PostInfo: PostInfo{},
 	}
-	result := FormatPost(item, -1)
+	result := FormatPost(item, -1, 0)
 	if !strings.Contains(result, "(@)") {
 		t.Errorf("expected empty handle format in output, got: %s", result)
 	}
@@ -1318,14 +1318,14 @@ func TestFormatPostListItem_basic(t *testing.T) {
 		ReplyCount:        7,
 		IndexedAt:         "2024-01-15T10:00:00Z",
 	}
-	result := FormatPostListItem(post, true)
+	result := FormatPostListItem(post, true, 0)
 	if !strings.Contains(result, "> @test.bsky.social") {
 		t.Errorf("expected cursor and handle, got: %s", result)
 	}
 	if !strings.Contains(result, "Hello world") {
 		t.Errorf("expected text in output, got: %s", result)
 	}
-	result = FormatPostListItem(post, false)
+	result = FormatPostListItem(post, false, 0)
 	if strings.Contains(result, "> @") {
 		t.Errorf("expected no cursor when cursor=false, got: %s", result)
 	}
@@ -1341,7 +1341,7 @@ func TestFormatPostListItem_truncation(t *testing.T) {
 		Text:         longText,
 		IndexedAt:    "2024-01-15T10:00:00Z",
 	}
-	result := FormatPostListItem(post, false)
+	result := FormatPostListItem(post, false, 0)
 	if !strings.Contains(result, "...") {
 		t.Errorf("expected truncated text, got: %s", result)
 	}
@@ -1353,7 +1353,7 @@ func TestFormatPostListItem_newlinesReplaced(t *testing.T) {
 		Text:         "line1\nline2\nline3",
 		IndexedAt:    "2024-01-15T10:00:00Z",
 	}
-	result := FormatPostListItem(post, false)
+	result := FormatPostListItem(post, false, 0)
 	if strings.Contains(result, "\n") && !strings.HasSuffix(result, "\n") {
 		t.Error("expected newlines in text to be replaced with spaces")
 	}
@@ -1366,7 +1366,7 @@ func TestFormatPostListItem_embeds(t *testing.T) {
 		Embeds:       []string{"https://example.com/img.jpg"},
 		IndexedAt:    "2024-01-15T10:00:00Z",
 	}
-	result := FormatPostListItem(post, false)
+	result := FormatPostListItem(post, false, 0)
 	if !strings.Contains(result, "1 attachment") {
 		t.Errorf("expected attachment indicator, got: %s", result)
 	}
@@ -1378,7 +1378,7 @@ func TestFormatPostListItem_emptyDisplayName(t *testing.T) {
 		Text:         "Hello",
 		IndexedAt:    "2024-01-15T10:00:00Z",
 	}
-	result := FormatPostListItem(post, false)
+	result := FormatPostListItem(post, false, 0)
 	if !strings.Contains(result, "(test.bsky.social)") {
 		t.Errorf("expected handle as fallback display name, got: %s", result)
 	}
@@ -1390,7 +1390,7 @@ func TestFormatPostListItem_shortDate(t *testing.T) {
 		Text:         "Hello",
 		CreatedAt:    "2024-01",
 	}
-	result := FormatPostListItem(post, false)
+	result := FormatPostListItem(post, false, 0)
 	if !strings.Contains(result, "📅 2024-01") {
 		t.Errorf("expected short date, got: %s", result)
 	}

@@ -37,6 +37,13 @@ type Model struct {
 	height      int
 }
 
+func (m Model) WithSize(w, h int) Model {
+	m.width = w
+	m.height = h
+	m.pageSize = utils.PageSize(h)
+	return m
+}
+
 func NewModel(uri string) Model {
 	return Model{
 		uri:      uri,
@@ -221,12 +228,13 @@ func (m Model) computeYOffset() int {
 	if len(m.replies) == 0 {
 		lines += 1
 	} else {
+		cw := utils.ContentWidth(m.width)
 		lines += 2
 
 		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
 		for i := m.scrollPos; i < end; i++ {
 			reply := m.replies[i]
-			itemStr := bsk.FormatPostListItem(reply.Post, m.cursor == i)
+			itemStr := bsk.FormatPostListItem(reply.Post, m.cursor == i, cw)
 			lines += strings.Count(itemStr, "\n")
 			if len(reply.Replies) > 0 {
 				lines += 1
@@ -247,7 +255,7 @@ func (m Model) computeYOffset() int {
 		if idx >= len(m.replies) {
 			idx = 0
 		}
-		postText := bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1)
+		postText := bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1, cw)
 		lines += strings.Count(postText, "\n")
 	}
 
@@ -292,13 +300,14 @@ func (m Model) View() tea.View {
 	if len(m.replies) == 0 {
 		b.WriteString("  No replies yet.\n")
 	} else {
+		cw := utils.ContentWidth(m.width)
 		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), utils.Pluralize(len(m.replies), "y", "ies")))
 
 		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
 
 		for i := m.scrollPos; i < end; i++ {
 			reply := m.replies[i]
-			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i))
+			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i, cw))
 			if len(reply.Replies) > 0 {
 				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), utils.Pluralize(len(reply.Replies), "y", "ies")))
 			}
@@ -317,7 +326,7 @@ func (m Model) View() tea.View {
 		if m.hasRendered {
 			cursor = m.imgCursor
 		}
-		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor))
+		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor, cw))
 	}
 
 	if m.imageRows > 0 {

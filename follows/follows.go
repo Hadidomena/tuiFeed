@@ -29,6 +29,12 @@ type Model struct {
 	height    int
 }
 
+func (m Model) WithSize(w, h int) Model {
+	m.width = w
+	m.height = h
+	return m
+}
+
 func NewModel() (Model, error) {
 	cfg, err := config.Load()
 	if err != nil {

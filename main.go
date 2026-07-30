@@ -96,7 +96,7 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m DashboardModel) View() tea.View {
 	var b strings.Builder
-	b.WriteString("Bluesky TUI Feed\n\n")
+	utils.WriteHeader(&b, "Bluesky TUI Feed", m.width)
 	for i, choice := range m.choices {
 		cursor := "  "
 		if m.cursor == i {
@@ -226,25 +226,29 @@ func NewMainModel() MainModel {
 	if err != nil {
 		cfg = &config.Config{}
 	}
+	width := utils.DefaultWidth
+	height := 24
 	fm, err := follows.NewModel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing follows: %v\n", err)
 		os.Exit(1)
 	}
+	fm = fm.WithSize(width, height)
 	fd, err := feed.NewModel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing feed: %v\n", err)
 		os.Exit(1)
 	}
+	fd = fd.WithSize(width, height)
 	return MainModel{
 		state:     showDashboardView,
 		cfg:       cfg,
 		dashboard: NewDashboardModel(),
 		follows:   fm,
 		feed:      fd,
-		loading:   LoadingModel{message: "Fetching posts..."},
-		width:     utils.DefaultWidth,
-		height:    24,
+		loading:   LoadingModel{message: "Fetching posts...", width: width, height: height},
+		width:     width,
+		height:    height,
 	}
 }
 
@@ -263,46 +267,55 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = showFollowsView
 		fm, err := follows.NewModel()
 		if err == nil {
-			m.follows = fm
+			m.follows = fm.WithSize(m.width, m.height)
 		}
 		return m, m.follows.Init()
 	case follows.BackMsg:
 		m.state = showDashboardView
 		m.cfg, _ = config.Load()
+		m.dashboard.width = m.width
+		m.dashboard.height = m.height
 		return m, nil
 	case OpenFeedMsg:
 		m.state = showFeedView
 		fd, err := feed.NewModel()
 		if err == nil {
-			m.feed = fd
+			m.feed = fd.WithSize(m.width, m.height)
 		}
 		return m, m.feed.Init()
 	case OpenSavedPostsMsg:
 		m.state = showSavedPostsView
 		m.cfg, _ = config.Load()
-		m.feed = feed.NewSavedModel(m.cfg)
+		m.feed = feed.NewSavedModel(m.cfg).WithSize(m.width, m.height)
 		return m, m.feed.Init()
 	case feed.BackMsg:
 		m.state = showDashboardView
+		m.dashboard.width = m.width
+		m.dashboard.height = m.height
 		return m, nil
 	case feed.OpenThreadMsg:
 		m.state = showThreadView
-		m.thread = thread.NewModel(msg.URI)
+		m.thread = thread.NewModel(msg.URI).WithSize(m.width, m.height)
 		return m, m.thread.Init()
 	case thread.BackMsg:
 		m.state = showFeedView
+		m.feed = m.feed.WithSize(m.width, m.height)
 		return m, nil
 	case OpenAccountSelectMsg:
 		m.state = showAccountSelectView
 		m.cfg, _ = config.Load()
 		m.accountSelect = NewAccountSelectModel(m.cfg)
+		m.accountSelect.width = m.width
+		m.accountSelect.height = m.height
 		return m, m.accountSelect.Init()
 	case BackToDashboardMsg:
 		m.state = showDashboardView
+		m.dashboard.width = m.width
+		m.dashboard.height = m.height
 		return m, nil
 	case SelectAccountForSinceLastCheck:
 		m.state = showLoadingView
-		m.loading = LoadingModel{message: fmt.Sprintf("Fetching posts for @%s...", msg.handle)}
+		m.loading = LoadingModel{message: fmt.Sprintf("Fetching posts for @%s...", msg.handle), width: m.width, height: m.height}
 		m.cfg, _ = config.Load()
 		lastCheck := ""
 		if m.cfg.LastChecks != nil {
@@ -313,9 +326,9 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = showSinceLastCheckView
 		m.cfg, _ = config.Load()
 		if msg.err != nil {
-			m.feed = feed.NewStaticModel(nil, fmt.Sprintf("Error: %v", msg.err))
+			m.feed = feed.NewStaticModel(nil, fmt.Sprintf("Error: %v", msg.err)).WithSize(m.width, m.height)
 		} else {
-			m.feed = feed.NewStaticModel(msg.posts, fmt.Sprintf("Posts since last check \u2014 @%s", msg.handle)).WithConfig(m.cfg)
+			m.feed = feed.NewStaticModel(msg.posts, fmt.Sprintf("Posts since last check \u2014 @%s", msg.handle)).WithConfig(m.cfg).WithSize(m.width, m.height)
 		}
 		return m, m.feed.Init()
 	}
