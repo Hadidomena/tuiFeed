@@ -326,29 +326,25 @@ func (m Model) recalcPageSize() Model {
 		return m
 	}
 
-	fixedBefore := 5
+	cw := utils.ContentWidth(m.width)
+	budget := utils.TextBudget(m.height)
 
 	idx := m.cursor
 	if idx >= len(m.posts) {
 		idx = 0
 	}
-	cw := utils.ContentWidth(m.width)
-	postText := bsk.FormatPost(m.posts[idx], -1, cw)
-	postLines := strings.Count(postText, "\n")
+	postLines := strings.Count(bsk.FormatPost(m.posts[idx], -1, cw, budget), "\n")
 
-	afterList := 2 + postLines + m.imageRows + 2
-	if m.statusMsg != "" {
-		afterList += 1
+	itemLines := strings.Count(bsk.FormatPostListItem(m.posts[idx].PostInfo, false, cw), "\n") + 1
+	if itemLines < 1 {
+		itemLines = 1
 	}
 
-	available := m.height - fixedBefore - afterList
-	if available < 4 {
-		m.pageSize = 1
-	} else {
-		m.pageSize = available / 4
-	}
-	if m.pageSize < 1 {
-		m.pageSize = 1
+	reserve := 10
+	available := m.height - reserve - postLines
+	m.pageSize = available / itemLines
+	if m.pageSize < 0 {
+		m.pageSize = 0
 	}
 	return m
 }
@@ -395,7 +391,7 @@ func (m Model) computeYOffset() int {
 	if idx >= len(m.posts) {
 		idx = 0
 	}
-	postText := bsk.FormatPost(m.posts[idx], -1, cw)
+	postText := bsk.FormatPost(m.posts[idx], -1, cw, utils.TextBudget(m.height))
 	lines += strings.Count(postText, "\n")
 
 	return lines
@@ -443,7 +439,7 @@ func (m Model) View() tea.View {
 		if m.hasRendered {
 			cursor = m.imgCursor
 		}
-		b.WriteString(bsk.FormatPost(m.posts[idx], cursor, cw))
+		b.WriteString(bsk.FormatPost(m.posts[idx], cursor, cw, utils.TextBudget(m.height)))
 	}
 
 	if m.hasRendered && m.imageRows > 0 {

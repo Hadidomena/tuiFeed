@@ -35,7 +35,6 @@ func longPostWithManyEmbeds() []bsk.FeedItem {
 func TestLayout_fitsSmallScreen(t *testing.T) {
 	for _, h := range []int{24, 40, 60} {
 		m := NewStaticModel(longPostWithManyEmbeds(), "Test")
-		// trigger resize -> recalc
 		um, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: h})
 		m = um.(Model)
 		view := m.View().Content
