@@ -221,27 +221,36 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func FormatPost(item FeedItem, imgCursor int, wrapWidth int) string {
+func FormatPost(item FeedItem, imgCursor int, wrapWidth int, maxTextLines int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
 	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
 	b.WriteString("\n")
+	text := item.Text
 	if wrapWidth > 0 {
-		b.WriteString(utils.WrapText(item.Text, wrapWidth))
-	} else {
-		b.WriteString(item.Text)
+		text = utils.WrapText(text, wrapWidth)
 	}
+	if maxTextLines > 0 {
+		text = utils.TruncateLines(text, maxTextLines)
+	}
+	b.WriteString(text)
 	b.WriteString("\n\n")
 
 	if len(item.Embeds) > 0 {
-		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
-		for i, embed := range item.Embeds {
-			marker := "  "
-			if i == imgCursor {
-				marker = "> "
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n", marker, embed))
+		current := imgCursor
+		if current < 0 || current >= len(item.Embeds) {
+			current = 0
 		}
+		b.WriteString(fmt.Sprintf("── Attachment %d/%d ──\n", current+1, len(item.Embeds)))
+		marker := "  "
+		if imgCursor == current {
+			marker = "> "
+		}
+		url := item.Embeds[current]
+		if wrapWidth > 0 {
+			url = utils.TruncateWidth(url, wrapWidth)
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", marker, url))
 	}
 
 	return b.String()
@@ -325,6 +334,7 @@ func FormatPostListItem(post PostInfo, cursor bool, wrapWidth int) string {
 			effectiveWidth = 10
 		}
 		text = utils.WrapText(text, effectiveWidth)
+		text = utils.TruncateLines(text, 2)
 	} else if len(text) > 120 {
 		text = text[:120] + "..."
 	}
