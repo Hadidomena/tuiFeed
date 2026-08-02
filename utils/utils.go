@@ -127,6 +127,44 @@ func WrapText(text string, maxWidth int) string {
 	return result.String()
 }
 
+func TextBudget(termHeight int) int {
+	b := termHeight / 4
+	if b < 3 {
+		b = 3
+	}
+	if b > 18 {
+		b = 18
+	}
+	return b
+}
+
+func TruncateLines(s string, maxLines int) string {
+	if maxLines <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= maxLines {
+		return s
+	}
+	truncated := lines[:maxLines]
+	truncated[maxLines-1] = truncated[maxLines-1] + " ..."
+	return strings.Join(truncated, "\n")
+}
+
+func TruncateWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 || runewidth.StringWidth(s) <= maxWidth {
+		return s
+	}
+	out := ""
+	for _, r := range s {
+		if runewidth.StringWidth(out)+runewidth.RuneWidth(r) > maxWidth-1 {
+			break
+		}
+		out += string(r)
+	}
+	return out + "…"
+}
+
 func wrapLine(line string, maxWidth int) string {
 	line = strings.TrimRight(line, " \t")
 	if runewidth.StringWidth(line) <= maxWidth {
