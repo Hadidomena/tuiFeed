@@ -47,12 +47,18 @@ func ComputeMaxRows(termHeight int, yOffset int) int {
 
 func ComputeMaxCols(termWidth int) int {
 	cw := utils.ContentWidth(termWidth)
+	if cw <= 0 {
+		return 0
+	}
 	maxCols := cw * 2 / 3
 	if maxCols > 60 {
 		maxCols = 60
 	}
 	if maxCols < 20 {
-		return 20
+		maxCols = 20
+	}
+	if maxCols > cw {
+		maxCols = cw
 	}
 	return maxCols
 }

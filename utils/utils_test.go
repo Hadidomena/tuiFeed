@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,103 @@ func TestPluralize(t *testing.T) {
 	}
 	if got := Pluralize(2, "y", "ies"); got != "ies" {
 		t.Errorf("Pluralize(2) = %q, want 'ies'", got)
+	}
+}
+
+func TestContentWidth(t *testing.T) {
+	cases := []struct {
+		termWidth int
+		want      int
+	}{
+		{0, DefaultWidth - 4},
+		{-5, DefaultWidth - 4},
+		{3, 0},
+		{4, 0},
+		{20, 16},
+		{80, 76},
+		{130, 120},
+	}
+	for _, c := range cases {
+		if got := ContentWidth(c.termWidth); got != c.want {
+			t.Errorf("ContentWidth(%d) = %d, want %d", c.termWidth, got, c.want)
+		}
+	}
+}
+
+func TestPageSize(t *testing.T) {
+	if got := PageSize(0); got != DefaultPageSize {
+		t.Errorf("PageSize(0) = %d, want %d", got, DefaultPageSize)
+	}
+	if got := PageSize(3); got != 3 {
+		t.Errorf("PageSize(3) = %d, want 3", got)
+	}
+	if got := PageSize(20); got != 14 {
+		t.Errorf("PageSize(20) = %d, want 14", got)
+	}
+}
+
+func TestCenterBlock(t *testing.T) {
+	if got := CenterBlock("hi", 0); got != "hi" {
+		t.Errorf("CenterBlock(hi, 0) = %q, want %q", got, "hi")
+	}
+	if got := CenterBlock("hi", 3); got != " hi" {
+		t.Errorf("CenterBlock(hi, 3) = %q, want %q", got, " hi")
+	}
+	if got := CenterBlock("hi", 20); got != "  hi" {
+		t.Errorf("CenterBlock(hi, 20) = %q, want %q", got, "  hi")
+	}
+	want := strings.Repeat(" ", 2) + "a\n" + strings.Repeat(" ", 2) + "b"
+	if got := CenterBlock("a\nb", 20); got != want {
+		t.Errorf("CenterBlock(a\\nb, 20) = %q, want %q", got, want)
+	}
+}
+
+func TestWrapTextNarrow(t *testing.T) {
+	if got := WrapText("hello", 0); got != "hello" {
+		t.Errorf("WrapText(hello, 0) = %q, want %q", got, "hello")
+	}
+	if got := WrapText("hello", 10); got != "hello" {
+		t.Errorf("WrapText(hello, 10) = %q, want %q", got, "hello")
+	}
+	if got := WrapText("hello world", 5); got != "hello\nworld" {
+		t.Errorf("WrapText(hello world, 5) = %q, want %q", got, "hello\nworld")
+	}
+	if got := WrapText("a b c d", 3); got != "a b\nc d" {
+		t.Errorf("WrapText(a b c d, 3) = %q, want %q", got, "a b\nc d")
+	}
+}
+
+func TestWrapTextWideRunes(t *testing.T) {
+	if got := WrapText("你 好 世 界", 3); got != "你\n好\n世\n界" {
+		t.Errorf("WrapText(wide, 3) = %q, want %q", got, "你\n好\n世\n界")
+	}
+	if got := WrapText("一二三四五六", 5); got != "一二三四五六" {
+		t.Errorf("WrapText(cjk single word, 5) = %q, want %q", got, "一二三四五六")
+	}
+	if got := WrapText("一二三 四五六", 5); got != "一二三\n四五六" {
+		t.Errorf("WrapText(cjk words, 5) = %q, want %q", got, "一二三\n四五六")
+	}
+}
+
+func TestWrapTextMultiPara(t *testing.T) {
+	got := WrapText("hello world\nfoo bar", 6)
+	want := "hello\nworld\nfoo\nbar"
+	if got != want {
+		t.Errorf("WrapText(paras, 6) = %q, want %q", got, want)
+	}
+}
+
+func TestTruncateWidth(t *testing.T) {
+	if got := TruncateWidth("short", 10); got != "short" {
+		t.Errorf("TruncateWidth(short, 10) = %q, want %q", got, "short")
+	}
+	if got := TruncateWidth("abcdef", 4); got != "abc…" {
+		t.Errorf("TruncateWidth(abcdef, 4) = %q, want %q", got, "abc…")
+	}
+	if got := TruncateWidth("一二三四", 4); got != "一…" {
+		t.Errorf("TruncateWidth(cjk, 4) = %q, want %q", got, "一…")
+	}
+	if got := TruncateWidth("", 4); got != "" {
+		t.Errorf("TruncateWidth(empty, 4) = %q, want empty", got)
 	}
 }
