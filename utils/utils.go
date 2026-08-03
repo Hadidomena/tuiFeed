@@ -17,6 +17,9 @@ func ContentWidth(termWidth int) int {
 		return DefaultWidth - 4
 	}
 	available := termWidth - 4
+	if available < 0 {
+		available = 0
+	}
 	if available > 120 {
 		return 120
 	}
@@ -156,11 +159,14 @@ func TruncateWidth(s string, maxWidth int) string {
 		return s
 	}
 	out := ""
+	w := 0
 	for _, r := range s {
-		if runewidth.StringWidth(out)+runewidth.RuneWidth(r) > maxWidth-1 {
+		rw := runewidth.RuneWidth(r)
+		if w+rw > maxWidth-1 {
 			break
 		}
 		out += string(r)
+		w += rw
 	}
 	return out + "…"
 }
