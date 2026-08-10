@@ -19,6 +19,8 @@ Browse posts from followed accounts, view images inline, follow/unfollow account
 ## Requirements
 
 - Go 1.25+
+
+## Optional Requirements
 - A terminal with Kitty graphics protocol or Sixel support for inline images
 
 ## Install
