@@ -10,10 +10,14 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
         package:
           - ./utils
           - ./bsk
@@ -21,6 +25,7 @@ jobs:
           - ./feed
           - ./thread
           - ./attach
+          - ./follows
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
