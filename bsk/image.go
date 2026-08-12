@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"os"
 	"os/exec"
+	"runtime"
 
 	sixel "github.com/mattn/go-sixel"
 	"golang.org/x/image/draw"
@@ -41,8 +42,14 @@ func DetectImageProtocol() ImageProto {
 	case "WezTerm":
 		detectedProto = ProtoKitty
 		return detectedProto
+	case "ghostty":
+		detectedProto = ProtoKitty
+		return detectedProto
 	case "iTerm.app":
 		detectedProto = ProtoSixel
+		return detectedProto
+	case "Apple_Terminal":
+		detectedProto = ProtoNone
 		return detectedProto
 	}
 
@@ -93,7 +100,24 @@ func RenderImageExternal(data []byte) error {
 	}
 	f.Close()
 
-	return exec.Command("xdg-open", name).Start()
+	cmd, args := externalOpener()
+	args = append(args, name)
+	return exec.Command(cmd, args...).Start()
+}
+
+func externalOpener() (string, []string) {
+	return openerFor(runtime.GOOS)
+}
+
+func openerFor(goos string) (string, []string) {
+	switch goos {
+	case "darwin":
+		return "open", nil
+	case "windows":
+		return "rundll32", []string{"url.dll,FileProtocolHandler"}
+	default:
+		return "xdg-open", nil
+	}
 }
 
 func resizeToFit(img image.Image, maxCols int, maxRows int) image.Image {
