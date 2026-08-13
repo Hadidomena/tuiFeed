@@ -2,6 +2,7 @@ package follows
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -252,24 +253,24 @@ func TestView_withStatus(t *testing.T) {
 }
 
 func TestNewModel_loadError(t *testing.T) {
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", "/dev/null/nonexistent")
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, "tuiFeed", "follows.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := NewModel()
-	if err != nil {
-		return
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
-	t.Fatal("expected error, got nil")
 }
 
 func TestUpdateList_dSaveError(t *testing.T) {
 	m := setupModel(t)
-	orig := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", orig)
 	tmp := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmp)
-	if err := os.MkdirAll(tmp+"/tuiFeed", 0o000); err != nil {
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	if err := os.WriteFile(filepath.Join(tmp, "tuiFeed"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

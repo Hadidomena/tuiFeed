@@ -26,9 +26,13 @@ func (c *Config) SetLastCheck(handle string) {
 }
 
 func configPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		var err error
+		dir, err = os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
 	}
 	return filepath.Join(dir, "tuiFeed", "follows.json"), nil
 }
