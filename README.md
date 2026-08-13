@@ -8,7 +8,7 @@ Browse posts from followed accounts, view images inline, follow/unfollow account
 
 - **Feed browser** — View recent posts from all followed accounts, sorted by date with pagination
 - **Since-last-check** — See only new posts since your last visit, filtered by account
-- **Image support** — Render images inline via [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [Sixel](https://en.wikipedia.org/wiki/Sixel), or open externally with `xdg-open`
+- **Image support** — Render images inline via [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [Sixel](https://en.wikipedia.org/wiki/Sixel), or open externally in your default viewer (`open` on macOS, `xdg-open` on Linux, default file handler on Windows)
 - **Manage follows** — Add or remove followed accounts through the UI
 - **Saved posts** — Bookmark posts for later reading
 - **Thread viewer** — Navigate comment/reply trees with breadcrumb trail and multi-level drilling
@@ -20,8 +20,17 @@ Browse posts from followed accounts, view images inline, follow/unfollow account
 
 - Go 1.25+
 
+## Platform support
+
+- **Linux**, **macOS**, and **Windows** are supported.
+- On macOS and Linux, images that can't be rendered in the terminal are opened
+  in your default image viewer (`open` / `xdg-open`). On Windows they are opened
+  via the default file handler (`rundll32`).
+
 ## Optional Requirements
-- A terminal with Kitty graphics protocol or Sixel support for inline images
+- A terminal with [Kitty graphics](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [Sixel](https://en.wikipedia.org/wiki/Sixel) support for in-terminal image rendering.
+  - Recommended: kitty, WezTerm, Ghostty (Kitty protocol), iTerm2 3.5+ (Sixel).
+  - Apple's **Terminal.app** supports neither protocol, so images there are opened externally in Preview.
 
 ## Install
 
@@ -44,6 +53,14 @@ go build .
 2. **View Feed** — Browse recent posts from all followed accounts
 3. **Posts since last check** — View new posts from a selected account
 4. **Saved posts** — Browse your bookmarked posts
+
+Configuration is stored at `$XDG_CONFIG_HOME/tuiFeed/follows.json`, or at
+`~/Library/Application Support/tuiFeed/follows.json` on macOS when
+`XDG_CONFIG_HOME` is not set.
+
+> **macOS Gatekeeper:** binaries downloaded from GitHub Releases are unsigned and
+> will be quarantined by Gatekeeper. Either build from source, or clear the
+> quarantine flag with `xattr -d com.apple.quarantine /path/to/tuiFeed`.
 
 ### Keybindings
 

@@ -1003,6 +1003,52 @@ func TestDetectImageProtocol_iterm(t *testing.T) {
 		}
 	})
 }
+
+func TestDetectImageProtocol_ghostty(t *testing.T) {
+	withImageEnv(t, "", "ghostty", "xterm-ghostty", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoKitty {
+			t.Errorf("expected ProtoKitty for Ghostty, got %v", proto)
+		}
+	})
+}
+
+func TestDetectImageProtocol_appleTerminal(t *testing.T) {
+	withImageEnv(t, "", "Apple_Terminal", "xterm-256color", func() {
+		proto := DetectImageProtocol()
+		if proto != ProtoNone {
+			t.Errorf("expected ProtoNone for Apple Terminal, got %v", proto)
+		}
+	})
+}
+
+func TestOpenerFor(t *testing.T) {
+	tests := []struct {
+		goos string
+		cmd  string
+		args []string
+	}{
+		{"darwin", "open", nil},
+		{"windows", "rundll32", []string{"url.dll,FileProtocolHandler"}},
+		{"linux", "xdg-open", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.goos, func(t *testing.T) {
+			cmd, args := openerFor(tt.goos)
+			if cmd != tt.cmd {
+				t.Errorf("expected cmd %q, got %q", tt.cmd, cmd)
+			}
+			if len(args) != len(tt.args) {
+				t.Fatalf("expected args %v, got %v", tt.args, args)
+			}
+			for i := range args {
+				if args[i] != tt.args[i] {
+					t.Errorf("expected arg %q, got %q", tt.args[i], args[i])
+				}
+			}
+		})
+	}
+}
 func TestRenderImage_downloadError(t *testing.T) {
 	server := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

@@ -9,50 +9,15 @@ on:
       - main
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  test-all:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        package:
-          - ./utils
-          - ./bsk
-          - ./config
-          - ./feed
-          - ./thread
-          - ./attach
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Run tests for ${{ matrix.package }}
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ${{ matrix.package }}
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.txt
-          flags: ${{ matrix.package }}
-        continue-on-error: true
-
-  test-all:
-    runs-on: ubuntu-latest
-    needs: test
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,4 +28,11 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run all tests together
-        run: go test -v ./...
+        run: go test -v -race -coverprofile="coverage.txt" -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.txt
+          flags: ${{ matrix.os }}
+        continue-on-error: true
