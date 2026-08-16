@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
@@ -48,6 +50,23 @@ func DownloadURL(url string) ([]byte, error) {
 		return nil, fmt.Errorf("read failed: %w", err)
 	}
 	return data, nil
+}
+
+func OpenExternal(target string) error {
+	cmd, args := openerFor(runtime.GOOS)
+	args = append(args, target)
+	return exec.Command(cmd, args...).Start()
+}
+
+func openerFor(goos string) (string, []string) {
+	switch goos {
+	case "darwin":
+		return "open", nil
+	case "windows":
+		return "rundll32", []string{"url.dll,FileProtocolHandler"}
+	default:
+		return "xdg-open", nil
+	}
 }
 
 func Pluralize(n int, singular, plural string) string {
