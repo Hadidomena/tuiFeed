@@ -286,6 +286,15 @@ func formatPublished(p string) string {
 	return p
 }
 
+func WriteMoreIndicators(b *strings.Builder, scrollPos, end, total int) {
+	if scrollPos > 0 {
+		fmt.Fprintf(b, "  ... %d more above\n", scrollPos)
+	}
+	if end < total {
+		fmt.Fprintf(b, "  ... %d more below\n", total-end)
+	}
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
