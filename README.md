@@ -2,7 +2,7 @@
 
 A terminal-based (TUI) feed reader for [Bluesky](https://bsky.app), built with [Bubble Tea v2](https://charm.land/bubbletea/v2).
 
-Browse posts from followed accounts, view images inline, follow/unfollow accounts, save posts for later, and explore comment threads — all without authentication or leaving your terminal.
+Browse posts from followed accounts, view images inline, follow/unfollow accounts, save posts for later, and explore comment threads — all without authentication or leaving your terminal. Subscribe to any RSS/Atom/JSON feed (news, blogs, podcasts, Reddit, YouTube…), and follow Bluesky accounts through RSS bridges like [RSSHub](https://docs.rsshub.app/routes/social-media#bluesky).
 
 ## Features
 
@@ -12,9 +12,11 @@ Browse posts from followed accounts, view images inline, follow/unfollow account
 - **Manage follows** — Add or remove followed accounts through the UI
 - **Saved posts** — Bookmark posts for later reading
 - **Thread viewer** — Navigate comment/reply trees with breadcrumb trail and multi-level drilling
+- **RSS reader** — Subscribe to any RSS 2.0/Atom/JSON feed URL (not just Bluesky), browse entries with inline images, save entries for later, and open links in your browser
+- **RSS since-last-check** — See only new entries since your last visit, per feed
 - **Keyboard-driven** — Full navigation with `j`/`k`, arrows, and single-key commands
 - **No account required** — Uses the public, unauthenticated Bluesky API
-- **Persistent config** — Follows, last-check timestamps, and saved posts stored in JSON at `$XDG_CONFIG_HOME/tuiFeed/follows.json`
+- **Persistent config** — Follows, RSS subscriptions, last-check timestamps, and saved posts/entries stored in JSON at `$XDG_CONFIG_HOME/tuiFeed/follows.json`
 
 ## Requirements
 
@@ -53,6 +55,29 @@ go build .
 2. **View Feed** — Browse recent posts from all followed accounts
 3. **Posts since last check** — View new posts from a selected account
 4. **Saved posts** — Browse your bookmarked posts
+5. **Manage RSS feeds** — Add any RSS/Atom/JSON feed URL to subscribe to (news sites, blogs, podcasts, Reddit, Hacker News, YouTube, or Bluesky accounts via a bridge — see below)
+6. **View RSS feeds** — Browse entries from all subscribed feeds
+7. **RSS since last check** — View new entries from a selected feed
+8. **Saved RSS entries** — Browse your bookmarked RSS entries
+
+### Subscribing to RSS feeds
+
+The RSS reader accepts any RSS 2.0, Atom, or JSON-feed URL — not just Bluesky-related ones. Examples:
+
+- `https://hnrss.org/frontpage` (Hacker News)
+- `https://www.reddit.com/r/golang/.rss` (subreddit)
+- `https://xkcd.com/rss.xml`
+- Your favorite blog's `/feed` or `/rss.xml`
+
+### Following Bluesky accounts via RSS
+
+Bluesky has no native RSS. To follow a Bluesky account through the RSS reader, use an RSS bridge such as RSSHub:
+
+```
+https://rsshub.app/bluesky/user/<handle>
+```
+
+for example `https://rsshub.app/bluesky/user/torvalds.bsky.social`. Public RSSHub instances may be rate-limited or blocked; consider self-hosting RSSHub for reliable access.
 
 Configuration is stored at `$XDG_CONFIG_HOME/tuiFeed/follows.json`, or at
 `~/Library/Application Support/tuiFeed/follows.json` on macOS when
@@ -72,6 +97,7 @@ Configuration is stored at `$XDG_CONFIG_HOME/tuiFeed/follows.json`, or at
 | `o` | Open attachment externally |
 | `s` | Save/unsave post |
 | `c` | Open comments (thread view) |
+| `w` / `Enter` | Open entry link in browser (RSS view) |
 | `r` | Refresh feed |
 | `←` / `→` | Cycle through attachments |
 | `Enter` | Drill into reply (thread view) |
@@ -89,7 +115,10 @@ Configuration is stored at `$XDG_CONFIG_HOME/tuiFeed/follows.json`, or at
 ├── follows/          Follow management view
 ├── thread/           Comment thread tree view
 ├── attach/           Attachment download & rendering bridge
-├── utils/            Shared helpers (scroll, pagination, HTTP)
+├── rss/              RSS/Atom feed fetching & parsing (gofeed)
+├── rssfeed/          Scrollable RSS entries view
+├── rssfeeds/         RSS feed subscription management view
+├── utils/            Shared helpers (scroll, pagination, HTTP, external open)
 └── internal/testutil Test utilities
 ```
 
