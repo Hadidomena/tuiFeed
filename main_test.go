@@ -9,6 +9,9 @@ import (
 	"github.com/Hadidomena/tuiFeed/config"
 	"github.com/Hadidomena/tuiFeed/feed"
 	"github.com/Hadidomena/tuiFeed/internal/testutil"
+	"github.com/Hadidomena/tuiFeed/rss"
+	"github.com/Hadidomena/tuiFeed/rssfeed"
+	"github.com/Hadidomena/tuiFeed/rssfeeds"
 	"github.com/Hadidomena/tuiFeed/thread"
 )
 
@@ -36,7 +39,7 @@ func TestDashboardUpdate_cursorNavigation(t *testing.T) {
 	})
 	t.Run("down", func(t *testing.T) {
 		m := NewDashboardModel()
-		for _, expected := range []int{1, 2, 3, 3} {
+		for _, expected := range []int{1, 2, 3, 4, 5, 6, 7, 7} {
 			m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
 			if m.cursor != expected {
 				t.Errorf("expected cursor %d, got %d", expected, m.cursor)
@@ -47,7 +50,7 @@ func TestDashboardUpdate_cursorNavigation(t *testing.T) {
 
 func TestDashboardUpdate_enter(t *testing.T) {
 	type want struct {
-		feed, sl, mng, save bool
+		feed, sl, mng, save, rss, rsssl, rssmng, saverss bool
 	}
 	tests := []struct {
 		cursor int
@@ -57,6 +60,10 @@ func TestDashboardUpdate_enter(t *testing.T) {
 		{1, want{sl: true}},
 		{2, want{mng: true}},
 		{3, want{save: true}},
+		{4, want{rss: true}},
+		{5, want{rsssl: true}},
+		{6, want{rssmng: true}},
+		{7, want{saverss: true}},
 	}
 	for _, tt := range tests {
 		m := NewDashboardModel()
@@ -82,6 +89,22 @@ func TestDashboardUpdate_enter(t *testing.T) {
 		case tt.want.save:
 			if _, ok := msg.(OpenSavedPostsMsg); !ok {
 				t.Errorf("cursor %d: expected OpenSavedPostsMsg, got %T", tt.cursor, msg)
+			}
+		case tt.want.rss:
+			if _, ok := msg.(OpenRSSMsg); !ok {
+				t.Errorf("cursor %d: expected OpenRSSMsg, got %T", tt.cursor, msg)
+			}
+		case tt.want.rsssl:
+			if _, ok := msg.(OpenRSSSelectMsg); !ok {
+				t.Errorf("cursor %d: expected OpenRSSSelectMsg, got %T", tt.cursor, msg)
+			}
+		case tt.want.rssmng:
+			if _, ok := msg.(OpenRSSManageMsg); !ok {
+				t.Errorf("cursor %d: expected OpenRSSManageMsg, got %T", tt.cursor, msg)
+			}
+		case tt.want.saverss:
+			if _, ok := msg.(OpenSavedRSSMsg); !ok {
+				t.Errorf("cursor %d: expected OpenSavedRSSMsg, got %T", tt.cursor, msg)
 			}
 		}
 	}
@@ -163,6 +186,70 @@ func TestAccountSelectUpdate_enterEmpty(t *testing.T) {
 	}
 }
 
+func TestRSSFeedSelectUpdate_esc(t *testing.T) {
+	m := NewRSSFeedSelectModel(&config.Config{})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEscape))
+	if cmd == nil {
+		t.Fatal("expected BackToDashboardMsg for esc")
+	}
+	msg := cmd()
+	if _, ok := msg.(BackToDashboardMsg); !ok {
+		t.Errorf("expected BackToDashboardMsg, got %T", msg)
+	}
+}
+
+func TestRSSFeedSelectUpdate_upDown(t *testing.T) {
+	cfg := &config.Config{RSSFeeds: []string{"https://a.com/f", "https://b.com/f", "https://c.com/f"}}
+	m := NewRSSFeedSelectModel(cfg)
+	m.cursor = 2
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyUp))
+	if m.cursor != 1 {
+		t.Errorf("expected cursor 1, got %d", m.cursor)
+	}
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
+	if m.cursor != 2 {
+		t.Errorf("expected cursor 2, got %d", m.cursor)
+	}
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyDown))
+	if m.cursor != 2 {
+		t.Errorf("expected cursor still 2, got %d", m.cursor)
+	}
+}
+
+func TestRSSFeedSelectUpdate_enter(t *testing.T) {
+	cfg := &config.Config{RSSFeeds: []string{"https://a.com/f"}}
+	m := NewRSSFeedSelectModel(cfg)
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatal("expected command for enter")
+	}
+	msg := cmd()
+	sel, ok := msg.(SelectRSSFeedForSinceLastCheck)
+	if !ok {
+		t.Fatalf("expected SelectRSSFeedForSinceLastCheck, got %T", msg)
+	}
+	if sel.url != "https://a.com/f" {
+		t.Errorf("expected url 'https://a.com/f', got %q", sel.url)
+	}
+}
+
+func TestRSSFeedSelectUpdate_enterEmpty(t *testing.T) {
+	m := NewRSSFeedSelectModel(&config.Config{})
+	_, cmd := m.Update(testutil.KeySpecial(tea.KeyEnter))
+	if cmd != nil {
+		t.Error("expected nil command for enter on empty list")
+	}
+}
+
+func TestRSSFeedSelectView_nonEmpty(t *testing.T) {
+	cfg := &config.Config{RSSFeeds: []string{"https://a.com/f"}}
+	m := NewRSSFeedSelectModel(cfg)
+	v := m.View()
+	if v.Content == "" {
+		t.Error("expected non-empty view")
+	}
+}
+
 func TestLoadingUpdate_returnsSelf(t *testing.T) {
 	m := LoadingModel{}
 	newModel, cmd := m.Update(testutil.KeyRune('q'))
@@ -201,5 +288,107 @@ func TestMainModel_OpenThreadMsg_fromDifferentStates(t *testing.T) {
 	mm, _ = testutil.UpdateModel(mm, feed.OpenThreadMsg{URI: "at://test/uri2"})
 	if mm.state != showThreadView {
 		t.Errorf("expected showThreadView from feed after back, got %d", mm.state)
+	}
+}
+
+func TestMainModel_OpenRSSMsg(t *testing.T) {
+	m := NewMainModel()
+	result, cmd := m.Update(OpenRSSMsg{})
+	mm := result.(MainModel)
+
+	if mm.state != showRSSView {
+		t.Errorf("expected showRSSView, got %d", mm.state)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil command from rssfeed.Init()")
+	}
+
+	v := mm.View()
+	if !strings.Contains(v.Content, "Loading RSS feeds") {
+		t.Errorf("expected RSS loading view, got: %s", v.Content)
+	}
+}
+
+func TestMainModel_OpenRSSManageMsg(t *testing.T) {
+	m := NewMainModel()
+	result, cmd := m.Update(OpenRSSManageMsg{})
+	mm := result.(MainModel)
+
+	if mm.state != showRSSManageView {
+		t.Errorf("expected showRSSManageView, got %d", mm.state)
+	}
+	if cmd != nil {
+		t.Error("expected nil command from rssfeeds.Init()")
+	}
+}
+
+func TestMainModel_OpenRSSSelectMsg(t *testing.T) {
+	m := NewMainModel()
+	result, cmd := m.Update(OpenRSSSelectMsg{})
+	mm := result.(MainModel)
+
+	if mm.state != showRSSFeedSelectView {
+		t.Errorf("expected showRSSFeedSelectView, got %d", mm.state)
+	}
+	if cmd != nil {
+		t.Error("expected nil command from rssFeedSelect.Init()")
+	}
+}
+
+func TestMainModel_OpenSavedRSSMsg(t *testing.T) {
+	m := NewMainModel()
+	result, cmd := m.Update(OpenSavedRSSMsg{})
+	mm := result.(MainModel)
+
+	if mm.state != showSavedRSSView {
+		t.Errorf("expected showSavedRSSView, got %d", mm.state)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil command from saved rssfeed.Init()")
+	}
+}
+
+func TestMainModel_rssfeedBackMsg(t *testing.T) {
+	m := NewMainModel()
+	m.state = showRSSView
+	mm, _ := testutil.UpdateModel(m, rssfeed.BackMsg{})
+	if mm.state != showDashboardView {
+		t.Errorf("expected showDashboardView, got %d", mm.state)
+	}
+}
+
+func TestMainModel_rssfeedsBackMsg(t *testing.T) {
+	m := NewMainModel()
+	m.state = showRSSManageView
+	mm, _ := testutil.UpdateModel(m, rssfeeds.BackMsg{})
+	if mm.state != showDashboardView {
+		t.Errorf("expected showDashboardView, got %d", mm.state)
+	}
+}
+
+func TestMainModel_SelectRSSFeedForSinceLastCheck(t *testing.T) {
+	m := NewMainModel()
+	mm, cmd := testutil.UpdateModel(m, SelectRSSFeedForSinceLastCheck{url: "https://a.com/f"})
+	if mm.state != showLoadingView {
+		t.Errorf("expected showLoadingView, got %d", mm.state)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil fetch command")
+	}
+}
+
+func TestMainModel_RSSEntriesFetchedMsg(t *testing.T) {
+	m := NewMainModel()
+	m.state = showLoadingView
+	msg := RSSEntriesFetchedMsg{
+		url:     "https://a.com/f",
+		entries: []rss.Entry{{Title: "Entry", ID: "id:1"}},
+	}
+	mm, cmd := testutil.UpdateModel(m, msg)
+	if mm.state != showRSSSinceLastCheckView {
+		t.Errorf("expected showRSSSinceLastCheckView, got %d", mm.state)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil command from rssfeed.Init()")
 	}
 }

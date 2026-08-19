@@ -9,12 +9,12 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
-	"os/exec"
-	"runtime"
 
 	sixel "github.com/mattn/go-sixel"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
+
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type ImageProto int
@@ -63,13 +63,13 @@ func DetectImageProtocol() ImageProto {
 	return detectedProto
 }
 
-func RenderTerminalImage(data []byte, yOffset int) (int, error) {
+func RenderTerminalImage(data []byte, yOffset int, maxCols int, maxRows int) (int, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return 0, fmt.Errorf("decode failed: %w", err)
 	}
 
-	img = resizeToFit(img, 40, 18)
+	img = resizeToFit(img, maxCols, maxRows)
 
 	proto := DetectImageProtocol()
 
@@ -100,24 +100,7 @@ func RenderImageExternal(data []byte) error {
 	}
 	f.Close()
 
-	cmd, args := externalOpener()
-	args = append(args, name)
-	return exec.Command(cmd, args...).Start()
-}
-
-func externalOpener() (string, []string) {
-	return openerFor(runtime.GOOS)
-}
-
-func openerFor(goos string) (string, []string) {
-	switch goos {
-	case "darwin":
-		return "open", nil
-	case "windows":
-		return "rundll32", []string{"url.dll,FileProtocolHandler"}
-	default:
-		return "xdg-open", nil
-	}
+	return utils.OpenExternal(name)
 }
 
 func resizeToFit(img image.Image, maxCols int, maxRows int) image.Image {

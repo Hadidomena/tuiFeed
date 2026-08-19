@@ -221,29 +221,42 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
-func FormatPost(item FeedItem, imgCursor int) string {
+func FormatPost(item FeedItem, imgCursor int, wrapWidth int, maxTextLines int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
 	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
 	b.WriteString("\n")
-	b.WriteString(item.Text)
+	text := item.Text
+	if wrapWidth > 0 {
+		text = utils.WrapText(text, wrapWidth)
+	}
+	if maxTextLines > 0 {
+		text = utils.TruncateLines(text, maxTextLines)
+	}
+	b.WriteString(text)
 	b.WriteString("\n\n")
 
 	if len(item.Embeds) > 0 {
-		b.WriteString(fmt.Sprintf("── %d Attachments ──\n", len(item.Embeds)))
-		for i, embed := range item.Embeds {
-			marker := "  "
-			if i == imgCursor {
-				marker = "> "
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n", marker, embed))
+		current := imgCursor
+		if current < 0 || current >= len(item.Embeds) {
+			current = 0
 		}
+		b.WriteString(fmt.Sprintf("── Attachment %d/%d ──\n", current+1, len(item.Embeds)))
+		marker := "  "
+		if imgCursor == current {
+			marker = "> "
+		}
+		url := item.Embeds[current]
+		if wrapWidth > 0 {
+			url = utils.TruncateWidth(url, wrapWidth)
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", marker, url))
 	}
 
 	return b.String()
 }
 
-func RenderImage(url string, yOffset int) (int, error) {
+func RenderImage(url string, yOffset int, maxCols int, maxRows int) (int, error) {
 	data, err := utils.DownloadURL(url)
 	if err != nil {
 		return 0, err
@@ -254,7 +267,7 @@ func RenderImage(url string, yOffset int) (int, error) {
 		return 0, fmt.Errorf("not an image: %s", ct)
 	}
 
-	return RenderTerminalImage(data, yOffset)
+	return RenderTerminalImage(data, yOffset, maxCols, maxRows)
 }
 
 func int64Val(p *int64) int64 {
@@ -289,7 +302,7 @@ func GetAuthorFeedCursor(ctx context.Context, client *xrpc.Client, handle string
 	return posts, nextCursor, nil
 }
 
-func FormatPostListItem(post PostInfo, cursor bool) string {
+func FormatPostListItem(post PostInfo, cursor bool, wrapWidth int) string {
 	var b strings.Builder
 
 	cursorStr := "  "
@@ -314,10 +327,17 @@ func FormatPostListItem(post PostInfo, cursor bool) string {
 		cursorStr, post.AuthorHandle, author, post.LikeCount, post.ReplyCount, createdAt))
 
 	text := strings.TrimSpace(post.Text)
-	if len(text) > 120 {
+	text = strings.ReplaceAll(text, "\n", " ")
+	if wrapWidth > 0 {
+		effectiveWidth := wrapWidth - 4
+		if effectiveWidth < 10 {
+			effectiveWidth = 10
+		}
+		text = utils.WrapText(text, effectiveWidth)
+		text = utils.TruncateLines(text, 2)
+	} else if len(text) > 120 {
 		text = text[:120] + "..."
 	}
-	text = strings.ReplaceAll(text, "\n", " ")
 	b.WriteString(fmt.Sprintf("    %s\n", text))
 
 	if len(post.Embeds) > 0 {

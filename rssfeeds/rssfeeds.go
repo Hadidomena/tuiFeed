@@ -1,4 +1,4 @@
-package follows
+package rssfeeds
 
 import (
 	"fmt"
@@ -75,35 +75,35 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		m.cursor = utils.CursorUp(m.cursor)
 	case "down", "j":
-		m.cursor = utils.CursorDown(m.cursor, len(m.cfg.Follows))
+		m.cursor = utils.CursorDown(m.cursor, len(m.cfg.RSSFeeds))
 	case "a":
 		m.mode = modeInput
 		m.input = ""
 		m.statusMsg = ""
 	case "d":
-		if len(m.cfg.Follows) > 0 {
-			handle := m.cfg.Follows[m.cursor]
+		if len(m.cfg.RSSFeeds) > 0 {
+			url := m.cfg.RSSFeeds[m.cursor]
 			fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
 				idx := -1
-				for i, h := range cfg.Follows {
-					if h == handle {
+				for i, u := range cfg.RSSFeeds {
+					if u == url {
 						idx = i
 						break
 					}
 				}
 				if idx >= 0 {
-					cfg.RemoveFollow(idx)
+					cfg.RemoveRSSFeed(idx)
 				}
 			})
 			if err != nil {
-				m.statusMsg = fmt.Sprintf("Error removing follow: %v", err)
+				m.statusMsg = fmt.Sprintf("Error removing feed: %v", err)
 				return m, nil
 			}
 			m.cfg = fresh
-			if m.cursor >= len(m.cfg.Follows) && m.cursor > 0 {
+			if m.cursor >= len(m.cfg.RSSFeeds) && m.cursor > 0 {
 				m.cursor--
 			}
-			m.statusMsg = fmt.Sprintf("Removed @%s", handle)
+			m.statusMsg = fmt.Sprintf("Removed %s", url)
 		}
 	}
 	return m, nil
@@ -116,25 +116,24 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.input = ""
 		m.statusMsg = ""
 	case "enter":
-		handle := strings.TrimSpace(m.input)
-		if handle == "" {
-			m.statusMsg = "Handle cannot be empty"
+		url := strings.TrimSpace(m.input)
+		if url == "" {
+			m.statusMsg = "URL cannot be empty"
 			m.mode = modeList
 			return m, nil
 		}
-		handle = strings.TrimPrefix(handle, "@")
 		fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
-			cfg.AddFollow(handle)
+			cfg.AddRSSFeed(url)
 		})
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error adding follow: %v", err)
+			m.statusMsg = fmt.Sprintf("Error adding feed: %v", err)
 			return m, nil
 		}
 		m.cfg = fresh
-		m.statusMsg = fmt.Sprintf("Added @%s", handle)
+		m.statusMsg = fmt.Sprintf("Added %s", url)
 		m.mode = modeList
 		m.input = ""
-		m.cursor = len(m.cfg.Follows) - 1
+		m.cursor = len(m.cfg.RSSFeeds) - 1
 	default:
 		if msg.Text != "" {
 			m.input += msg.Text
@@ -150,24 +149,24 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) View() tea.View {
 	var b strings.Builder
 
-	utils.WriteHeader(&b, "Followed Accounts", m.width)
+	utils.WriteHeader(&b, "RSS Feeds", m.width)
 
-	if len(m.cfg.Follows) == 0 {
-		b.WriteString("  No accounts followed yet.\n")
-		b.WriteString("  Press 'a' to add a Bluesky handle.\n\n")
+	if len(m.cfg.RSSFeeds) == 0 {
+		b.WriteString("  No RSS feeds subscribed yet.\n")
+		b.WriteString("  Press 'a' to add a feed URL.\n\n")
 	} else {
-		for i, handle := range m.cfg.Follows {
+		for i, url := range m.cfg.RSSFeeds {
 			cursor := "  "
 			if m.cursor == i && m.mode == modeList {
 				cursor = "> "
 			}
-			b.WriteString(fmt.Sprintf("%s@%s\n", cursor, handle))
+			fmt.Fprintf(&b, "%s%s\n", cursor, url)
 		}
 		b.WriteString("\n")
 	}
 
 	if m.mode == modeInput {
-		b.WriteString(fmt.Sprintf("Enter handle: @%s█\n", m.input))
+		fmt.Fprintf(&b, "Enter feed URL: %s█\n", m.input)
 	}
 
 	b.WriteString("\n")

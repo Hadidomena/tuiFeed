@@ -10,6 +10,7 @@ import (
 	"github.com/Hadidomena/tuiFeed/attach"
 	"github.com/Hadidomena/tuiFeed/bsk"
 	"github.com/Hadidomena/tuiFeed/internal/testutil"
+	"github.com/Hadidomena/tuiFeed/utils"
 )
 
 type testError struct{ msg string }
@@ -44,6 +45,8 @@ func defaultModel(root *bsk.ThreadNode, opts ...modelOption) Model {
 		replies:    root.Replies,
 		breadcrumb: []string{"@" + root.Post.AuthorHandle},
 		pageSize:   10,
+		width:      utils.DefaultWidth,
+		height:     40,
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -503,8 +506,8 @@ func TestUpdate_scrollAdvances(t *testing.T) {
 		m = r.(Model)
 	}
 
-	if m.scrollPos != 1 {
-		t.Errorf("expected scrollPos 1 after 10 j presses, got %d", m.scrollPos)
+	if m.scrollPos != 3 {
+		t.Errorf("expected scrollPos 3 after 10 j presses, got %d", m.scrollPos)
 	}
 	if m.cursor != 10 {
 		t.Errorf("expected cursor 10 after 10 j presses, got %d", m.cursor)

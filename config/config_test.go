@@ -230,3 +230,131 @@ func TestGetSavedPostURIs(t *testing.T) {
 		t.Error("GetSavedPostURIs should return a copy")
 	}
 }
+
+func TestAddRSSFeed(t *testing.T) {
+	cfg := &Config{}
+	cfg.AddRSSFeed("https://example.com/feed.xml")
+	cfg.AddRSSFeed("https://example.com/other.xml")
+	cfg.AddRSSFeed("https://example.com/feed.xml")
+
+	if len(cfg.RSSFeeds) != 2 {
+		t.Fatalf("expected 2 feeds, got %d", len(cfg.RSSFeeds))
+	}
+	if cfg.RSSFeeds[0] != "https://example.com/feed.xml" {
+		t.Errorf("expected feed.xml first, got %s", cfg.RSSFeeds[0])
+	}
+	if cfg.RSSFeeds[1] != "https://example.com/other.xml" {
+		t.Errorf("expected other.xml second, got %s", cfg.RSSFeeds[1])
+	}
+}
+
+func TestRemoveRSSFeed(t *testing.T) {
+	cfg := &Config{RSSFeeds: []string{"a", "b", "c"}}
+	cfg.RemoveRSSFeed(1)
+	if len(cfg.RSSFeeds) != 2 {
+		t.Fatalf("expected 2 feeds, got %d", len(cfg.RSSFeeds))
+	}
+	if cfg.RSSFeeds[0] != "a" || cfg.RSSFeeds[1] != "c" {
+		t.Errorf("unexpected feeds: %v", cfg.RSSFeeds)
+	}
+}
+
+func TestRemoveRSSFeedOutOfBounds(t *testing.T) {
+	cfg := &Config{RSSFeeds: []string{"a"}}
+	cfg.RemoveRSSFeed(-1)
+	cfg.RemoveRSSFeed(5)
+	if len(cfg.RSSFeeds) != 1 {
+		t.Fatalf("expected 1 feed, got %d", len(cfg.RSSFeeds))
+	}
+}
+
+func TestRemoveRSSFeed_withLastChecks(t *testing.T) {
+	cfg := &Config{
+		RSSFeeds:      []string{"a", "b", "c"},
+		RSSLastChecks: map[string]string{"a": "t1", "b": "t2", "c": "t3"},
+	}
+	cfg.RemoveRSSFeed(1)
+	if _, ok := cfg.RSSLastChecks["b"]; ok {
+		t.Errorf("expected last check for removed feed 'b' to be deleted")
+	}
+	if cfg.RSSLastChecks["a"] != "t1" || cfg.RSSLastChecks["c"] != "t3" {
+		t.Errorf("remaining last checks are wrong")
+	}
+}
+
+func TestSetRSSLastCheck(t *testing.T) {
+	cfg := &Config{}
+	cfg.SetRSSLastCheck("https://example.com/feed.xml")
+	if cfg.RSSLastChecks == nil {
+		t.Fatal("expected RSSLastChecks map to be initialized")
+	}
+	if cfg.RSSLastChecks["https://example.com/feed.xml"] == "" {
+		t.Fatal("expected RSSLastCheck to be set")
+	}
+	cfg.SetRSSLastCheck("https://example.com/other.xml")
+	if len(cfg.RSSLastChecks) != 2 {
+		t.Errorf("expected 2 last checks, got %d", len(cfg.RSSLastChecks))
+	}
+}
+
+func TestSaveEntry(t *testing.T) {
+	cfg := &Config{}
+	cfg.SaveEntry("id:one")
+	cfg.SaveEntry("id:two")
+
+	if len(cfg.SavedEntries) != 2 {
+		t.Fatalf("expected 2 saved entries, got %d", len(cfg.SavedEntries))
+	}
+	if cfg.SavedEntries[0] != "id:one" {
+		t.Errorf("unexpected first entry: %s", cfg.SavedEntries[0])
+	}
+}
+
+func TestSaveEntry_duplicate(t *testing.T) {
+	cfg := &Config{}
+	cfg.SaveEntry("id:one")
+	cfg.SaveEntry("id:one")
+
+	if len(cfg.SavedEntries) != 1 {
+		t.Fatalf("expected 1 saved entry after duplicate, got %d", len(cfg.SavedEntries))
+	}
+}
+
+func TestRemoveSavedEntry(t *testing.T) {
+	cfg := &Config{SavedEntries: []string{"id:a", "id:b", "id:c"}}
+	cfg.RemoveSavedEntry("id:b")
+
+	if len(cfg.SavedEntries) != 2 {
+		t.Fatalf("expected 2 saved entries, got %d", len(cfg.SavedEntries))
+	}
+	if cfg.SavedEntries[0] != "id:a" || cfg.SavedEntries[1] != "id:c" {
+		t.Errorf("unexpected saved entries: %v", cfg.SavedEntries)
+	}
+
+	cfg.RemoveSavedEntry("nonexistent")
+	if len(cfg.SavedEntries) != 2 {
+		t.Fatalf("expected 2 saved entries, got %d", len(cfg.SavedEntries))
+	}
+}
+
+func TestIsEntrySaved(t *testing.T) {
+	cfg := &Config{SavedEntries: []string{"id:one", "id:two"}}
+	if !cfg.IsEntrySaved("id:one") {
+		t.Error("expected id:one to be saved")
+	}
+	if cfg.IsEntrySaved("id:three") {
+		t.Error("expected id:three not to be saved")
+	}
+}
+
+func TestGetSavedEntryIDs(t *testing.T) {
+	cfg := &Config{SavedEntries: []string{"a", "b", "c"}}
+	ids := cfg.GetSavedEntryIDs()
+	if len(ids) != 3 {
+		t.Fatalf("expected 3 IDs, got %d", len(ids))
+	}
+	ids[0] = "modified"
+	if cfg.SavedEntries[0] == "modified" {
+		t.Error("GetSavedEntryIDs should return a copy")
+	}
+}

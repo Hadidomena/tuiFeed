@@ -33,6 +33,15 @@ type Model struct {
 	imgCursor   int
 	hasRendered bool
 	imageRows   int
+	width       int
+	height      int
+}
+
+func (m Model) WithSize(w, h int) Model {
+	m.width = w
+	m.height = h
+	m.pageSize = utils.PageSize(h)
+	return m
 }
 
 func NewModel(uri string) Model {
@@ -40,6 +49,8 @@ func NewModel(uri string) Model {
 		uri:      uri,
 		loading:  true,
 		pageSize: utils.DefaultPageSize,
+		width:    utils.DefaultWidth,
+		height:   24,
 	}
 }
 
@@ -62,6 +73,9 @@ func (m Model) loadThread() tea.Msg {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -142,6 +156,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "a":
 			if !m.loading && len(m.replies) > 0 && m.cursor < len(m.replies) && len(m.replies[m.cursor].Post.Embeds) > 0 {
+				yOff := m.computeYOffset()
+				if attach.ComputeMaxRows(m.height, yOff) <= 0 {
+					m.statusMsg = "Not enough room. Resize terminal taller or scroll up."
+					return m, nil
+				}
 				m.imgCursor = 0
 				m.hasRendered = true
 				return m, m.renderAttachment
@@ -175,15 +194,103 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = string(msg)
 	}
 
+	m = m.recalcPageSize()
 	return m, nil
 }
 
+func (m Model) recalcPageSize() Model {
+	if m.height <= 0 || m.root == nil || len(m.replies) == 0 {
+		return m
+	}
+
+	cw := utils.ContentWidth(m.width)
+	budget := utils.TextBudget(m.height)
+
+	idx := m.cursor
+	if idx >= len(m.replies) {
+		idx = 0
+	}
+	postLines := strings.Count(bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1, cw, budget), "\n")
+
+	itemLines := strings.Count(bsk.FormatPostListItem(m.replies[idx].Post, false, cw), "\n") + 1
+	if len(m.replies[idx].Replies) > 0 {
+		itemLines++
+	}
+	if itemLines < 1 {
+		itemLines = 1
+	}
+
+	reserve := 10
+	available := m.height - reserve - postLines
+	m.pageSize = available / itemLines
+	if m.pageSize < 0 {
+		m.pageSize = 0
+	}
+	return m
+}
+
 func (m Model) renderAttachment() tea.Msg {
-	reply := m.replies[m.cursor]
-	postText := bsk.FormatPost(bsk.FeedItem{PostInfo: reply.Post, URI: reply.URI}, m.imgCursor)
-	postLines := strings.Count(postText, "\n")
-	yOffset := 6 + postLines
-	return attach.Render(reply.Post.Embeds, m.imgCursor, yOffset)
+	if len(m.replies) == 0 || m.cursor >= len(m.replies) {
+		return attach.ErrorMsg("No reply selected")
+	}
+	yOffset := m.computeYOffset()
+	maxCols := attach.ComputeMaxCols(m.width)
+	maxRows := attach.ComputeMaxRows(m.height, yOffset)
+	return attach.Render(m.replies[m.cursor].Post.Embeds, m.imgCursor, yOffset, maxCols, maxRows)
+}
+
+func (m Model) computeYOffset() int {
+	if m.root == nil {
+		return 4
+	}
+
+	lines := 0
+
+	lines += 3
+
+	const maxBreadcrumb = 5
+	breadcrumbLine := strings.Join(m.breadcrumb, " > ")
+	if len(m.breadcrumb) > maxBreadcrumb {
+		breadcrumbLine = "... > " + strings.Join(m.breadcrumb[len(m.breadcrumb)-maxBreadcrumb:], " > ")
+	}
+	lines += 1 + strings.Count(breadcrumbLine, "\n")
+	lines += 1
+
+	if len(m.replies) == 0 {
+		lines += 1
+	} else {
+		cw := utils.ContentWidth(m.width)
+		lines += 2
+
+		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
+		for i := m.scrollPos; i < end; i++ {
+			reply := m.replies[i]
+			itemStr := bsk.FormatPostListItem(reply.Post, m.cursor == i, cw)
+			lines += strings.Count(itemStr, "\n")
+			if len(reply.Replies) > 0 {
+				lines += 1
+			}
+			lines += 1
+		}
+
+		if m.scrollPos > 0 {
+			lines += 1
+		}
+		if end < len(m.replies) {
+			lines += 1
+		}
+
+		lines += 2
+
+		idx := m.cursor
+		if idx >= len(m.replies) {
+			idx = 0
+		}
+		postText := bsk.FormatPost(bsk.FeedItem{PostInfo: m.replies[idx].Post, URI: m.replies[idx].URI}, -1, cw, utils.TextBudget(m.height))
+		lines += strings.Count(postText, "\n")
+	}
+
+	return lines
 }
 
 func (m Model) openAttachment() tea.Msg {
@@ -195,22 +302,22 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 
 	if m.statusMsg != "" && m.root == nil {
-		utils.WriteHeader(&b, "Comments", 30)
+		utils.WriteHeader(&b, "Comments", m.width)
 		b.WriteString(m.statusMsg + "\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
 	if m.loading {
 		b.WriteString("Loading comments...\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
 	if m.root == nil {
 		b.WriteString("No thread data.\n")
-		return tea.NewView(b.String())
+		return tea.NewView(utils.CenterBlock(b.String(), m.width))
 	}
 
-	utils.WriteHeader(&b, "Comments", 30)
+	utils.WriteHeader(&b, "Comments", m.width)
 
 	const maxBreadcrumb = 5
 	if len(m.breadcrumb) > maxBreadcrumb {
@@ -224,13 +331,14 @@ func (m Model) View() tea.View {
 	if len(m.replies) == 0 {
 		b.WriteString("  No replies yet.\n")
 	} else {
+		cw := utils.ContentWidth(m.width)
 		b.WriteString(fmt.Sprintf("%d repl%s\n\n", len(m.replies), utils.Pluralize(len(m.replies), "y", "ies")))
 
 		end := utils.ScrollWindowEnd(m.scrollPos, m.pageSize, len(m.replies))
 
 		for i := m.scrollPos; i < end; i++ {
 			reply := m.replies[i]
-			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i))
+			b.WriteString(bsk.FormatPostListItem(reply.Post, m.cursor == i, cw))
 			if len(reply.Replies) > 0 {
 				b.WriteString(fmt.Sprintf("    [%d repl%s]\n", len(reply.Replies), utils.Pluralize(len(reply.Replies), "y", "ies")))
 			}
@@ -249,7 +357,7 @@ func (m Model) View() tea.View {
 		if m.hasRendered {
 			cursor = m.imgCursor
 		}
-		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor))
+		b.WriteString(bsk.FormatPost(bsk.FeedItem{PostInfo: selected.Post, URI: selected.URI}, cursor, cw, utils.TextBudget(m.height)))
 	}
 
 	if m.imageRows > 0 {
@@ -274,5 +382,5 @@ func (m Model) View() tea.View {
 	help += "  [esc] to feed  [q] quit\n"
 	b.WriteString(help)
 
-	return tea.NewView(b.String())
+	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }
