@@ -255,10 +255,10 @@ func TestUpdate_entriesLoadedMsg(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
 	m.loading = true
 	m.cursor = 5
-	msg := entriesLoadedMsg([]rss.Entry{
+	msg := entriesLoadedMsg{entries: []rss.Entry{
 		{Title: "a"},
 		{Title: "b"},
-	})
+	}}
 	m, cmd := testutil.UpdateModel(m, msg)
 	if cmd != nil {
 		t.Error("expected no command")
@@ -277,7 +277,7 @@ func TestUpdate_entriesLoadedMsg(t *testing.T) {
 func TestUpdate_entriesLoadedMsg_empty(t *testing.T) {
 	m := NewStaticModel(nil, "Test")
 	m.loading = true
-	m, _ = testutil.UpdateModel(m, entriesLoadedMsg([]rss.Entry{}))
+	m, _ = testutil.UpdateModel(m, entriesLoadedMsg{})
 	if m.statusMsg != "No entries found." {
 		t.Errorf("expected 'No entries found.', got %q", m.statusMsg)
 	}
@@ -573,11 +573,11 @@ func TestLoadEntries_fetch(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected entriesLoadedMsg, got %T", msg)
 	}
-	if len(pl) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(pl))
+	if len(pl.entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(pl.entries))
 	}
-	if pl[0].Title != "Hello" {
-		t.Errorf("expected 'Hello', got %q", pl[0].Title)
+	if pl.entries[0].Title != "Hello" {
+		t.Errorf("expected 'Hello', got %q", pl.entries[0].Title)
 	}
 }
 
@@ -589,8 +589,8 @@ func TestLoadSavedEntries_empty(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected entriesLoadedMsg, got %T", msg)
 	}
-	if len(pl) != 0 {
-		t.Errorf("expected 0 entries, got %d", len(pl))
+	if len(pl.entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(pl.entries))
 	}
 }
 
