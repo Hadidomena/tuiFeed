@@ -69,6 +69,19 @@ The RSS reader accepts any RSS 2.0, Atom, or JSON-feed URL — not just Bluesky-
 - `https://xkcd.com/rss.xml`
 - Your favorite blog's `/feed` or `/rss.xml`
 
+### Following X/Twitter accounts via Nitter
+
+X has no free API or RSS, so for now tuiFeed reads X accounts through the [Nitter](https://github.com/zedeus/nitter/wiki/Instances) mirror [xcancel.com](https://xcancel.com). In *Manage RSS feeds* press `a` and type any of:
+
+- `@handle` → full timeline
+- `@handle/media` → media-only posts
+- `@handle/with_replies` → timeline plus replies
+- `x.com/handle` or `twitter.com/handle` also work
+
+Image thumbnails render inline (`a`), and video clips play directly in the terminal with `v` via mpv's kitty output (install `mpv`; on other setups the clip opens externally).
+
+> **xcancel.com whitelist:** first-time fetches return a "RSS reader not yet whitelisted" error containing a hex ID. Email `rss@xcancel.com` with that ID (and a one-line reason) to get your reader whitelisted; afterwards feeds work normally.
+
 ### Following Bluesky accounts via RSS
 
 Bluesky has no native RSS. To follow a Bluesky account through the RSS reader, use an RSS bridge such as RSSHub:
@@ -98,6 +111,7 @@ Configuration is stored at `$XDG_CONFIG_HOME/tuiFeed/follows.json`, or at
 | `s` | Save/unsave post |
 | `c` | Open comments (thread view) |
 | `w` / `Enter` | Open entry link in browser (RSS view) |
+| `v` | Play video attachment in-terminal via mpv (RSS view) |
 | `r` | Refresh feed |
 | `←` / `→` | Cycle through attachments |
 | `Enter` | Drill into reply (thread view) |
