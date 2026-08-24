@@ -58,6 +58,13 @@ func OpenExternal(target string) error {
 	return exec.Command(cmd, args...).Start()
 }
 
+func StreamVideo(url string) error {
+	if path, err := exec.LookPath("mpv"); err == nil {
+		return exec.Command(path, "--vo=kitty", url).Start()
+	}
+	return OpenExternal(url)
+}
+
 func openerFor(goos string) (string, []string) {
 	switch goos {
 	case "darwin":
