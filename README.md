@@ -78,7 +78,7 @@ X has no free API or RSS, so for now tuiFeed reads X accounts through the [Nitte
 - `@handle/with_replies` → timeline plus replies
 - `x.com/handle` or `twitter.com/handle` also work
 
-Image thumbnails render inline (`a`), and video clips play directly in the terminal with `v` via mpv's kitty output (install `mpv`; on other setups the clip opens externally).
+Image thumbnails render inline (`a`), and video clips play directly in the terminal with `v` via mpv's kitty output on kitty-compatible terminals (kitty, WezTerm, Ghostty, etc.). On other terminals or without mpv, the clip opens externally in your default player.
 
 > **xcancel.com whitelist:** first-time fetches return a "RSS reader not yet whitelisted" error containing a hex ID. Email `rss@xcancel.com` with that ID (and a one-line reason) to get your reader whitelisted; afterwards feeds work normally.
 
