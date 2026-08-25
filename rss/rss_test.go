@@ -2,6 +2,7 @@ package rss
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -296,6 +297,41 @@ func TestFormatEntryListItem(t *testing.T) {
 	}
 	if !strings.HasPrefix(out, ">") {
 		t.Errorf("expected cursor marker: %q", out)
+	}
+}
+
+func TestFormatEntryListItem_mediaTags(t *testing.T) {
+	tests := []struct {
+		name   string
+		e      Entry
+		images int
+		videos int
+	}{
+		{"no media", Entry{Title: "T", Text: "t"}, 0, 0},
+		{"images only", Entry{Title: "T", Text: "t", Images: []string{"a.jpg"}}, 1, 0},
+		{"videos only", Entry{Title: "T", Text: "t", Videos: []string{"v.mp4"}}, 0, 1},
+		{"both", Entry{Title: "T", Text: "t", Images: []string{"a.jpg"}, Videos: []string{"v.mp4"}}, 1, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := FormatEntryListItem(tt.e, false, 80)
+			wantImgs := fmt.Sprintf("%d image(s)", tt.images)
+			wantVids := fmt.Sprintf("%d video(s)", tt.videos)
+			hasImgs := strings.Contains(out, wantImgs)
+			hasVids := strings.Contains(out, wantVids)
+			if tt.images > 0 && !hasImgs {
+				t.Errorf("expected %q in output: %q", wantImgs, out)
+			}
+			if tt.images == 0 && hasImgs {
+				t.Errorf("unexpected image tag in output: %q", out)
+			}
+			if tt.videos > 0 && !hasVids {
+				t.Errorf("expected %q in output: %q", wantVids, out)
+			}
+			if tt.videos == 0 && hasVids {
+				t.Errorf("unexpected video tag in output: %q", out)
+			}
+		})
 	}
 }
 

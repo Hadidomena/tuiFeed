@@ -68,7 +68,7 @@ func FetchFeed(ctx context.Context, url string) ([]Entry, error) {
 		return nil, fmt.Errorf("parsing %s: %w", url, err)
 	}
 
-	if err := detectNitterGate(feed); err != nil {
+	if err := detectNitterGate(url, feed); err != nil {
 		return nil, err
 	}
 
@@ -120,7 +120,14 @@ func mapEntry(feedTitle, feedURL string, item *gofeed.Item) Entry {
 	return e
 }
 
-func detectNitterGate(feed *gofeed.Feed) error {
+func isNitterURL(url string) bool {
+	return strings.Contains(url, "://"+nitterHost) || strings.Contains(url, "://"+DefaultNitterBase)
+}
+
+func detectNitterGate(url string, feed *gofeed.Feed) error {
+	if !isNitterURL(url) {
+		return nil
+	}
 	gated := strings.Contains(strings.ToLower(feed.Title), "not yet whitelisted")
 	var first *gofeed.Item
 	if len(feed.Items) > 0 {
@@ -335,8 +342,15 @@ func FormatEntryListItem(e Entry, cursor bool, wrapWidth int) string {
 	}
 	fmt.Fprintf(&b, "    %s\n", text)
 
+	var tags []string
 	if len(e.Images) > 0 {
-		fmt.Fprintf(&b, "    [%d attachment(s)]\n", len(e.Images))
+		tags = append(tags, fmt.Sprintf("%d image(s)", len(e.Images)))
+	}
+	if len(e.Videos) > 0 {
+		tags = append(tags, fmt.Sprintf("%d video(s)", len(e.Videos)))
+	}
+	if len(tags) > 0 {
+		fmt.Fprintf(&b, "    [%s]\n", strings.Join(tags, ", "))
 	}
 
 	return b.String()
