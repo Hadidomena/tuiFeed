@@ -131,6 +131,10 @@ func (m Model) loadSavedEntries() tea.Msg {
 	if err != nil && len(entries) == 0 {
 		return loadErrorMsg(fmt.Sprintf("Error loading saved entries: %v", err))
 	}
+	msg := entriesLoadedMsg{}
+	if err != nil {
+		msg.warn = fmt.Sprintf("Some feeds failed: %v", err)
+	}
 	savedSet := make(map[string]bool, len(saved))
 	for _, id := range saved {
 		savedSet[id] = true
@@ -141,7 +145,8 @@ func (m Model) loadSavedEntries() tea.Msg {
 			filtered = append(filtered, e)
 		}
 	}
-	return entriesLoadedMsg{entries: filtered}
+	msg.entries = filtered
+	return msg
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -210,12 +215,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "v":
 			if m.cursor < len(m.entries) && len(m.entries[m.cursor].Videos) > 0 {
 				url := m.entries[m.cursor].Videos[0]
-				m.statusMsg = "Launching mpv..."
+				m.statusMsg = "Launching player..."
 				return m, func() tea.Msg {
-					if err := utils.StreamVideo(url); err != nil {
+					mode, err := utils.StreamVideo(url)
+					if err != nil {
 						return loadErrorMsg(fmt.Sprintf("Play failed: %v", err))
 					}
-					return statusMsg("Playing in mpv (kitty output)")
+					return statusMsg(fmt.Sprintf("Playing via %s", mode))
 				}
 			}
 			m.statusMsg = "Entry has no video"

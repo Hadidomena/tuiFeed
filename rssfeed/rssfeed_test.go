@@ -605,3 +605,43 @@ func TestLoadSavedEntries_noConfig(t *testing.T) {
 		t.Errorf("expected 'Not available in this view.', got %q", string(errMsg))
 	}
 }
+
+func TestLoadSavedEntries_partialFailureWarns(t *testing.T) {
+	const body = `<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Feed</title>
+    <item>
+      <title>Hello</title>
+      <link>https://example.com/1</link>
+      <guid>https://example.com/1</guid>
+    </item>
+  </channel>
+</rss>`
+	good := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer good.Close()
+	bad := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "oops", http.StatusInternalServerError)
+	}))
+	defer bad.Close()
+
+	cfg := &config.Config{}
+	cfg.AddRSSFeed(good.URL)
+	cfg.AddRSSFeed(bad.URL)
+	cfg.SaveEntry("https://example.com/1")
+
+	m := NewSavedModel(cfg)
+	msg := m.loadSavedEntries()
+	pl, ok := msg.(entriesLoadedMsg)
+	if !ok {
+		t.Fatalf("expected entriesLoadedMsg, got %T", msg)
+	}
+	if len(pl.entries) != 1 {
+		t.Errorf("expected 1 saved entry, got %d", len(pl.entries))
+	}
+	if pl.warn == "" {
+		t.Error("expected warning on partial failure")
+	}
+}
