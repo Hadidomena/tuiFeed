@@ -1,7 +1,6 @@
 package rss
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -54,7 +53,12 @@ func TestFetchFeed_nitterGate(t *testing.T) {
 	srv := feedServer(t, nitterGateFeed, http.StatusOK)
 	defer srv.Close()
 
-	_, err := FetchFeed(context.Background(), srv.URL)
+	feed, err := gofeed.NewParser().ParseString(nitterGateFeed)
+	if err != nil {
+		t.Fatalf("parse nitter gate feed: %v", err)
+	}
+
+	err = detectNitterGate("https://xcancel.com/test/rss", feed)
 	if err == nil {
 		t.Fatal("expected whitelist gate error")
 	}
@@ -63,6 +67,13 @@ func TestFetchFeed_nitterGate(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "9db973f922") {
 		t.Errorf("expected whitelist ID in error, got %v", err)
+	}
+}
+
+func TestFetchFeed_nitterGateNotAppliedToOtherFeeds(t *testing.T) {
+	feed := &gofeed.Feed{Title: "RSS reader not yet whitelisted!"}
+	if err := detectNitterGate("https://example.com/feed.xml", feed); err != nil {
+		t.Errorf("expected no gate error for non-nitter feed, got %v", err)
 	}
 }
 

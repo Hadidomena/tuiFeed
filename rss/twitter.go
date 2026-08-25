@@ -7,6 +7,7 @@ import (
 )
 
 const DefaultNitterBase = "https://xcancel.com"
+const nitterHost = "xcancel.com"
 
 var (
 	twitterLinkRe = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.)?(?:x|twitter)\.com/@?([A-Za-z0-9_]{1,15})(?:/(with_replies|media|highlights))?/?$`)
