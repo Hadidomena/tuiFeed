@@ -6,6 +6,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -120,8 +121,13 @@ func mapEntry(feedTitle, feedURL string, item *gofeed.Item) Entry {
 	return e
 }
 
-func isNitterURL(url string) bool {
-	return strings.Contains(url, "://"+nitterHost)
+func isNitterURL(rawurl string) bool {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == nitterHost || strings.HasSuffix(host, "."+nitterHost)
 }
 
 func detectNitterGate(url string, feed *gofeed.Feed) error {

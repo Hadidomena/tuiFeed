@@ -70,6 +70,27 @@ func TestFetchFeed_nitterGate(t *testing.T) {
 	}
 }
 
+func TestIsNitterURL(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"https://xcancel.com/test/rss", true},
+		{"https://rss.xcancel.com/test/rss", true},
+		{"https://www.xcancel.com/test/rss", true},
+		{"http://xcancel.com/test/rss", true},
+		{"https://notxcancel.com/test/rss", false},
+		{"https://example.com/xcancel.com/rss", false},
+		{"://xcancel.com", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isNitterURL(tt.in); got != tt.want {
+			t.Errorf("isNitterURL(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestFetchFeed_nitterGateNotAppliedToOtherFeeds(t *testing.T) {
 	feed := &gofeed.Feed{Title: "RSS reader not yet whitelisted!"}
 	if err := detectNitterGate("https://example.com/feed.xml", feed); err != nil {
