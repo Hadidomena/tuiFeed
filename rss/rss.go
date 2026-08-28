@@ -121,7 +121,7 @@ func mapEntry(feedTitle, feedURL string, item *gofeed.Item) Entry {
 }
 
 func isNitterURL(url string) bool {
-	return strings.Contains(url, "://"+nitterHost) || strings.Contains(url, "://"+DefaultNitterBase)
+	return strings.Contains(url, "://"+nitterHost)
 }
 
 func detectNitterGate(url string, feed *gofeed.Feed) error {
