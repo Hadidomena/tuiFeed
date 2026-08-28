@@ -77,7 +77,7 @@ func supportsKittyGraphics() bool {
 		return true
 	}
 	switch strings.ToLower(os.Getenv("TERM_PROGRAM")) {
-	case "kitty", "wezterm", "ghostty", "konsole", "alacritty":
+	case "kitty", "wezterm", "ghostty", "konsole":
 		return true
 	}
 	return false

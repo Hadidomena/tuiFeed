@@ -178,7 +178,7 @@ func TestSupportsKittyGraphics(t *testing.T) {
 	})
 	t.Run("kitty protocol terminal", func(t *testing.T) {
 		t.Setenv("KITTY_WINDOW_ID", "")
-		for _, prog := range []string{"kitty", "WezTerm", "ghostty", "Konsole", "alacritty"} {
+		for _, prog := range []string{"kitty", "WezTerm", "ghostty", "Konsole"} {
 			t.Setenv("TERM_PROGRAM", prog)
 			if !supportsKittyGraphics() {
 				t.Errorf("expected kitty support for TERM_PROGRAM=%q", prog)
