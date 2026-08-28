@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Hadidomena/tuiFeed/config"
+	"github.com/Hadidomena/tuiFeed/rss"
 	"github.com/Hadidomena/tuiFeed/utils"
 )
 
@@ -122,6 +123,7 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeList
 			return m, nil
 		}
+		url = rss.NormalizeTwitterInput(url)
 		fresh, err := config.ApplyUpdateAndReload(func(cfg *config.Config) {
 			cfg.AddRSSFeed(url)
 		})
@@ -153,7 +155,7 @@ func (m Model) View() tea.View {
 
 	if len(m.cfg.RSSFeeds) == 0 {
 		b.WriteString("  No RSS feeds subscribed yet.\n")
-		b.WriteString("  Press 'a' to add a feed URL.\n\n")
+		b.WriteString("  Press 'a' to add a feed URL or X/Twitter @handle.\n\n")
 	} else {
 		for i, url := range m.cfg.RSSFeeds {
 			cursor := "  "
@@ -166,7 +168,7 @@ func (m Model) View() tea.View {
 	}
 
 	if m.mode == modeInput {
-		fmt.Fprintf(&b, "Enter feed URL: %s█\n", m.input)
+		fmt.Fprintf(&b, "Enter feed URL or X/Twitter @handle: %s█\n", m.input)
 	}
 
 	b.WriteString("\n")

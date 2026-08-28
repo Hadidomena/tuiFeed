@@ -168,6 +168,32 @@ func TestTruncateWidth(t *testing.T) {
 	}
 }
 
+func TestSupportsKittyGraphics(t *testing.T) {
+	t.Run("kitty window id", func(t *testing.T) {
+		t.Setenv("KITTY_WINDOW_ID", "12345")
+		t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+		if !supportsKittyGraphics() {
+			t.Error("expected kitty support with KITTY_WINDOW_ID set")
+		}
+	})
+	t.Run("kitty protocol terminal", func(t *testing.T) {
+		t.Setenv("KITTY_WINDOW_ID", "")
+		for _, prog := range []string{"kitty", "WezTerm", "ghostty", "Konsole"} {
+			t.Setenv("TERM_PROGRAM", prog)
+			if !supportsKittyGraphics() {
+				t.Errorf("expected kitty support for TERM_PROGRAM=%q", prog)
+			}
+		}
+	})
+	t.Run("unsupported terminal", func(t *testing.T) {
+		t.Setenv("KITTY_WINDOW_ID", "")
+		t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+		if supportsKittyGraphics() {
+			t.Error("expected no kitty support for Apple_Terminal")
+		}
+	})
+}
+
 func TestOpenerFor(t *testing.T) {
 	tests := []struct {
 		goos string

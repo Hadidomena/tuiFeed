@@ -15,7 +15,10 @@ import (
 
 type BackMsg struct{}
 
-type entriesLoadedMsg []rss.Entry
+type entriesLoadedMsg struct {
+	entries []rss.Entry
+	warn    string
+}
 
 type loadErrorMsg string
 
@@ -105,10 +108,14 @@ func (m Model) loadEntries() tea.Msg {
 	}
 
 	entries, err := rss.FetchAll(ctx, m.cfg.RSSFeeds)
-	if err != nil {
+	if err != nil && len(entries) == 0 {
 		return loadErrorMsg(fmt.Sprintf("Error fetching feeds: %v", err))
 	}
-	return entriesLoadedMsg(entries)
+	msg := entriesLoadedMsg{entries: entries}
+	if err != nil {
+		msg.warn = fmt.Sprintf("Some feeds failed: %v", err)
+	}
+	return msg
 }
 
 func (m Model) loadSavedEntries() tea.Msg {
@@ -117,12 +124,16 @@ func (m Model) loadSavedEntries() tea.Msg {
 	}
 	saved := m.cfg.GetSavedEntryIDs()
 	if len(saved) == 0 {
-		return entriesLoadedMsg(nil)
+		return entriesLoadedMsg{}
 	}
 	ctx := context.Background()
 	entries, err := rss.FetchAll(ctx, m.cfg.RSSFeeds)
 	if err != nil && len(entries) == 0 {
 		return loadErrorMsg(fmt.Sprintf("Error loading saved entries: %v", err))
+	}
+	msg := entriesLoadedMsg{}
+	if err != nil {
+		msg.warn = fmt.Sprintf("Some feeds failed: %v", err)
 	}
 	savedSet := make(map[string]bool, len(saved))
 	for _, id := range saved {
@@ -134,7 +145,8 @@ func (m Model) loadSavedEntries() tea.Msg {
 			filtered = append(filtered, e)
 		}
 	}
-	return entriesLoadedMsg(filtered)
+	msg.entries = filtered
+	return msg
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -200,6 +212,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "Opening image externally..."
 				return m, m.openAttachment
 			}
+		case "v":
+			if m.cursor < len(m.entries) && len(m.entries[m.cursor].Videos) > 0 {
+				url := m.entries[m.cursor].Videos[0]
+				m.statusMsg = "Launching player..."
+				return m, func() tea.Msg {
+					mode, err := utils.StreamVideo(url)
+					if err != nil {
+						return loadErrorMsg(fmt.Sprintf("Play failed: %v", err))
+					}
+					return statusMsg(fmt.Sprintf("Playing via %s", mode))
+				}
+			}
+			m.statusMsg = "Entry has no video"
 		case "w", "enter":
 			if m.cursor < len(m.entries) {
 				link := m.entries[m.cursor].Link
@@ -285,14 +310,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loadEntries
 		}
 	case entriesLoadedMsg:
-		m.entries = []rss.Entry(msg)
+		m.entries = msg.entries
 		m.loading = false
 		m.cursor = 0
 		m.imgCursor = 0
 		m.scrollPos = 0
 		m.hasRendered = false
 		m.imageRows = 0
-		if len(msg) == 0 {
+		switch {
+		case msg.warn != "":
+			m.statusMsg = "Warning: " + msg.warn
+		case len(msg.entries) == 0:
 			m.statusMsg = "No entries found."
 		}
 	case loadErrorMsg:
@@ -442,9 +470,9 @@ func (m Model) View() tea.View {
 	}
 
 	if m.isSavedView {
-		b.WriteString("\n[w] open link  [s] remove  [a] attachments  [o] open externally  [esc] back  [q] quit\n")
+		b.WriteString("\n[w] open link  [s] remove  [a] attachments  [o] open externally  [v] play video  [esc] back  [q] quit\n")
 	} else {
-		b.WriteString("\n[w] open link  [s] save  [a] attachments  [o] open externally  [r] refresh  [esc] back  [q] quit\n")
+		b.WriteString("\n[w] open link  [s] save  [a] attachments  [o] open externally  [v] play video  [r] refresh  [esc] back  [q] quit\n")
 	}
 	return tea.NewView(utils.CenterBlock(b.String(), m.width))
 }

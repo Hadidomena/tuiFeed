@@ -6,6 +6,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,11 +28,15 @@ type Entry struct {
 	Published string
 	Text      string
 	Images    []string
+	Videos    []string
 }
 
 var (
-	imgTagRe = regexp.MustCompile(`(?is)<img\b[^>]*?\bsrc=["']([^"']+)["']`)
-	tagRe    = regexp.MustCompile(`(?s)<[^>]*>`)
+	imgTagRe   = regexp.MustCompile(`(?is)<img\b[^>]*?\bsrc=["']([^"']+)["']`)
+	videoSrcRe = regexp.MustCompile(`(?is)<(?:video|source)\b[^>]*?\bsrc=["']([^"']+)["']`)
+	tagRe      = regexp.MustCompile(`(?s)<[^>]*>`)
+
+	whitelistIDRe = regexp.MustCompile(`(?i)\b([0-9a-f]{40,})\b`)
 )
 
 func FetchFeed(ctx context.Context, url string) ([]Entry, error) {
@@ -62,6 +67,10 @@ func FetchFeed(ctx context.Context, url string) ([]Entry, error) {
 	feed, err := parser.ParseString(string(body))
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", url, err)
+	}
+
+	if err := detectNitterGate(url, feed); err != nil {
+		return nil, err
 	}
 
 	feedTitle := strings.TrimSpace(feed.Title)
@@ -108,7 +117,44 @@ func mapEntry(feedTitle, feedURL string, item *gofeed.Item) Entry {
 		Text:      cleanText(item),
 	}
 	e.Images = extractImages(item)
+	e.Videos = extractVideos(item)
 	return e
+}
+
+func isNitterURL(rawurl string) bool {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == nitterHost || strings.HasSuffix(host, "."+nitterHost)
+}
+
+func detectNitterGate(url string, feed *gofeed.Feed) error {
+	if !isNitterURL(url) {
+		return nil
+	}
+	gated := strings.Contains(strings.ToLower(feed.Title), "not yet whitelisted")
+	var first *gofeed.Item
+	if len(feed.Items) > 0 {
+		first = feed.Items[0]
+	}
+	if !gated && first != nil {
+		gated = strings.Contains(strings.ToLower(first.Title), "not yet whitelisted")
+	}
+	if !gated {
+		return nil
+	}
+	id := ""
+	if first != nil {
+		if m := whitelistIDRe.FindStringSubmatch(first.Description); m != nil {
+			id = m[1]
+		}
+	}
+	if id == "" {
+		return fmt.Errorf("nitter mirror requires RSS reader whitelisting; email rss@xcancel.com to request access")
+	}
+	return fmt.Errorf("xcancel.com requires RSS reader whitelisting. Email rss@xcancel.com and include this ID: %s", id)
 }
 
 func EntryID(item *gofeed.Item) string {
@@ -188,6 +234,35 @@ func extractImages(item *gofeed.Item) []string {
 	return images
 }
 
+func extractVideos(item *gofeed.Item) []string {
+	seen := make(map[string]bool)
+	var videos []string
+	add := func(u string) {
+		u = strings.TrimSpace(u)
+		if u == "" || seen[u] {
+			return
+		}
+		seen[u] = true
+		videos = append(videos, u)
+	}
+
+	for _, enc := range item.Enclosures {
+		if enc != nil && strings.HasPrefix(enc.Type, "video/") {
+			add(enc.URL)
+		}
+	}
+
+	content := item.Content
+	if strings.TrimSpace(content) == "" {
+		content = item.Description
+	}
+	for _, m := range videoSrcRe.FindAllStringSubmatch(content, -1) {
+		add(m[1])
+	}
+
+	return videos
+}
+
 func stripHTML(s string) string {
 	s = tagRe.ReplaceAllString(s, "")
 	s = html.UnescapeString(s)
@@ -224,6 +299,10 @@ func FormatEntry(e Entry, imgCursor int, wrapWidth int, maxTextLines int) string
 	}
 	b.WriteString(text)
 	b.WriteString("\n\n")
+
+	if len(e.Videos) > 0 {
+		fmt.Fprintf(&b, "\U0001F3AC %d video(s) — press v to play\n", len(e.Videos))
+	}
 
 	if len(e.Images) > 0 {
 		current := imgCursor
@@ -269,8 +348,15 @@ func FormatEntryListItem(e Entry, cursor bool, wrapWidth int) string {
 	}
 	fmt.Fprintf(&b, "    %s\n", text)
 
+	var tags []string
 	if len(e.Images) > 0 {
-		fmt.Fprintf(&b, "    [%d attachment(s)]\n", len(e.Images))
+		tags = append(tags, fmt.Sprintf("%d image(s)", len(e.Images)))
+	}
+	if len(e.Videos) > 0 {
+		tags = append(tags, fmt.Sprintf("%d video(s)", len(e.Videos)))
+	}
+	if len(tags) > 0 {
+		fmt.Fprintf(&b, "    [%s]\n", strings.Join(tags, ", "))
 	}
 
 	return b.String()

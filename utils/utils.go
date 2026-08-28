@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -56,6 +57,30 @@ func OpenExternal(target string) error {
 	cmd, args := openerFor(runtime.GOOS)
 	args = append(args, target)
 	return exec.Command(cmd, args...).Start()
+}
+
+func StreamVideo(url string) (string, error) {
+	if path, err := exec.LookPath("mpv"); err == nil && supportsKittyGraphics() {
+		if err := exec.Command(path, "--vo=kitty", url).Start(); err != nil {
+			return "", err
+		}
+		return "mpv (kitty output)", nil
+	}
+	if err := OpenExternal(url); err != nil {
+		return "", err
+	}
+	return "external player", nil
+}
+
+func supportsKittyGraphics() bool {
+	if os.Getenv("KITTY_WINDOW_ID") != "" {
+		return true
+	}
+	switch strings.ToLower(os.Getenv("TERM_PROGRAM")) {
+	case "kitty", "wezterm", "ghostty", "konsole":
+		return true
+	}
+	return false
 }
 
 func openerFor(goos string) (string, []string) {
