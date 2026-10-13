@@ -319,6 +319,7 @@ func (m LoadingModel) View() tea.View {
 type MainModel struct {
 	state         sessionState
 	cfg           *config.Config
+	cfgErr        error
 	dashboard     DashboardModel
 	follows       follows.Model
 	accountSelect AccountSelectModel
@@ -334,7 +335,9 @@ type MainModel struct {
 
 func NewMainModel() MainModel {
 	cfg, err := config.Load()
+	var cfgErr error
 	if err != nil {
+		cfgErr = err
 		cfg = &config.Config{}
 	}
 	width := utils.DefaultWidth
@@ -354,6 +357,7 @@ func NewMainModel() MainModel {
 	return MainModel{
 		state:     showDashboardView,
 		cfg:       cfg,
+		cfgErr:    cfgErr,
 		dashboard: NewDashboardModel(),
 		follows:   fm,
 		feed:      fd,
@@ -367,8 +371,22 @@ func (m MainModel) Init() tea.Cmd {
 	return m.dashboard.Init()
 }
 
+func (m *MainModel) reloadConfig() {
+	cfg, err := config.Load()
+	if err != nil {
+		m.cfgErr = err
+		return
+	}
+	m.cfg = cfg
+	m.cfgErr = nil
+}
+
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && keyMsg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -383,7 +401,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.follows.Init()
 	case follows.BackMsg:
 		m.state = showDashboardView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		m.dashboard.width = m.width
 		m.dashboard.height = m.height
 		return m, nil
@@ -396,7 +414,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.feed.Init()
 	case OpenSavedPostsMsg:
 		m.state = showSavedPostsView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		m.feed = feed.NewSavedModel(m.cfg).WithSize(m.width, m.height)
 		return m, m.feed.Init()
 	case feed.BackMsg:
@@ -414,7 +432,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case OpenAccountSelectMsg:
 		m.state = showAccountSelectView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		m.accountSelect = NewAccountSelectModel(m.cfg)
 		m.accountSelect.width = m.width
 		m.accountSelect.height = m.height
@@ -427,7 +445,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SelectAccountForSinceLastCheck:
 		m.state = showLoadingView
 		m.loading = LoadingModel{message: fmt.Sprintf("Fetching posts for @%s...", msg.handle), width: m.width, height: m.height}
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		lastCheck := ""
 		if m.cfg.LastChecks != nil {
 			lastCheck = m.cfg.LastChecks[msg.handle]
@@ -435,7 +453,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchSinceLastCheckCmd(msg.handle, lastCheck)
 	case PostsFetchedMsg:
 		m.state = showSinceLastCheckView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		if msg.err != nil {
 			m.feed = feed.NewStaticModel(nil, fmt.Sprintf("Error: %v", msg.err)).WithSize(m.width, m.height)
 		} else {
@@ -458,14 +476,14 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.rssfeeds.Init()
 	case OpenRSSSelectMsg:
 		m.state = showRSSFeedSelectView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		m.rssFeedSelect = NewRSSFeedSelectModel(m.cfg)
 		m.rssFeedSelect.width = m.width
 		m.rssFeedSelect.height = m.height
 		return m, m.rssFeedSelect.Init()
 	case OpenSavedRSSMsg:
 		m.state = showSavedRSSView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		m.rssfeed = rssfeed.NewSavedModel(m.cfg).WithSize(m.width, m.height)
 		return m, m.rssfeed.Init()
 	case rssfeed.BackMsg, rssfeeds.BackMsg:
@@ -476,7 +494,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SelectRSSFeedForSinceLastCheck:
 		m.state = showLoadingView
 		m.loading = LoadingModel{message: fmt.Sprintf("Fetching entries from %s...", msg.url), width: m.width, height: m.height}
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		lastCheck := ""
 		if m.cfg.RSSLastChecks != nil {
 			lastCheck = m.cfg.RSSLastChecks[msg.url]
@@ -484,7 +502,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchRSSSinceLastCheckCmd(msg.url, lastCheck)
 	case RSSEntriesFetchedMsg:
 		m.state = showRSSSinceLastCheckView
-		m.cfg, _ = config.Load()
+		m.reloadConfig()
 		if msg.err != nil {
 			m.rssfeed = rssfeed.NewStaticModel(nil, fmt.Sprintf("Error: %v", msg.err)).WithSize(m.width, m.height)
 		} else {
@@ -531,7 +549,11 @@ func updateSubModel[M tea.Model](model M, msg tea.Msg) (M, tea.Cmd) {
 func (m MainModel) View() tea.View {
 	switch m.state {
 	case showDashboardView:
-		return m.dashboard.View()
+		v := m.dashboard.View()
+		if m.cfgErr != nil {
+			v.Content += fmt.Sprintf("\n  warning: could not load config: %v\n", m.cfgErr)
+		}
+		return v
 	case showFollowsView:
 		return m.follows.View()
 	case showFeedView:

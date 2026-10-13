@@ -392,3 +392,30 @@ func TestMainModel_RSSEntriesFetchedMsg(t *testing.T) {
 		t.Error("expected non-nil command from rssfeed.Init()")
 	}
 }
+
+func TestMainModel_ctrlCQuitsInEveryState(t *testing.T) {
+	key := testutil.KeyPress("", 'c', tea.ModCtrl)
+	states := []struct {
+		name  string
+		state sessionState
+	}{
+		{"loading", showLoadingView},
+		{"accountSelect", showAccountSelectView},
+		{"rssFeedSelect", showRSSFeedSelectView},
+		{"follows", showFollowsView},
+	}
+	for _, tt := range states {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewMainModel()
+			m.state = tt.state
+			_, cmd := m.Update(key)
+			if cmd == nil {
+				t.Fatal("expected quit command for ctrl+c")
+			}
+			msg := cmd()
+			if _, ok := msg.(tea.QuitMsg); !ok {
+				t.Errorf("expected tea.QuitMsg for ctrl+c, got %T", msg)
+			}
+		})
+	}
+}

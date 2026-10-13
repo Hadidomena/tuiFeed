@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -190,6 +191,24 @@ func TestUpdateInput_backspace(t *testing.T) {
 	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyBackspace))
 	if m.input != "" {
 		t.Errorf("expected still empty input, got %q", m.input)
+	}
+}
+
+func TestUpdateInput_backspaceMultibyte(t *testing.T) {
+	m := setupModel(t)
+	m.mode = modeInput
+	m.input = "https://example.com/féed"
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyBackspace))
+	if m.input != "https://example.com/fée" {
+		t.Errorf("expected 'https://example.com/fée' after backspace, got %q", m.input)
+	}
+	m.input = "日本"
+	m, _ = testutil.UpdateModel(m, testutil.KeySpecial(tea.KeyBackspace))
+	if m.input != "日" {
+		t.Errorf("expected '日' after backspace, got %q", m.input)
+	}
+	if !utf8.ValidString(m.input) {
+		t.Errorf("expected valid UTF-8, got %q", m.input)
 	}
 }
 
