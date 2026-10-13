@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -90,6 +91,41 @@ func withImageEnv(t *testing.T, kittyVal, termProgVal, termVal string, fn func()
 	os.Setenv("TERM_PROGRAM", termProgVal)
 	os.Setenv("TERM", termVal)
 	fn()
+}
+
+func TestNewClient_hasTimeout(t *testing.T) {
+	client := NewClient()
+	if client.Client == nil {
+		t.Fatal("expected custom http.Client")
+	}
+	if client.Client.Timeout != fetchTimeout {
+		t.Errorf("expected timeout %v, got %v", fetchTimeout, client.Client.Timeout)
+	}
+}
+
+func TestFormatTimestampAt(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		iso  string
+		want string
+	}{
+		{"", ""},
+		{now.Add(-30 * time.Second).Format(time.RFC3339), "now"},
+		{now.Add(-45 * time.Minute).Format(time.RFC3339), "45m"},
+		{now.Add(-3 * time.Hour).Format(time.RFC3339), "3h"},
+		{now.Add(-23 * time.Hour).Format(time.RFC3339), "23h"},
+		{now.Add(-3 * 24 * time.Hour).Format(time.RFC3339), "3d"},
+		{now.Add(-8 * 24 * time.Hour).Format(time.RFC3339), "2026-10-05"},
+		{now.Add(2 * time.Hour).Format(time.RFC3339), "2026-10-13"},
+		{"2024-01", "2024-01"},
+		{"2024-01-15T10:00:00Z", "2024-01-15"},
+		{"not-a-timestamp-longer", "not-a-time"},
+	}
+	for _, tt := range tests {
+		if got := formatTimestampAt(tt.iso, now); got != tt.want {
+			t.Errorf("formatTimestampAt(%q) = %q, want %q", tt.iso, got, tt.want)
+		}
+	}
 }
 
 func TestExtractPostInfo_basic(t *testing.T) {

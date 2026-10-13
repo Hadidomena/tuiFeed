@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/Hadidomena/tuiFeed/utils"
 )
+
+const fetchTimeout = 20 * time.Second
 
 type PostInfo struct {
 	AuthorDisplayName string
@@ -113,7 +116,8 @@ func buildThreadNode(threadView *bsky.FeedDefs_ThreadViewPost) *ThreadNode {
 
 func NewClient() *xrpc.Client {
 	return &xrpc.Client{
-		Host: "https://public.api.bsky.app",
+		Client: &http.Client{Timeout: fetchTimeout},
+		Host:   "https://public.api.bsky.app",
 	}
 }
 
@@ -221,10 +225,38 @@ func GetAuthorFeed(ctx context.Context, client *xrpc.Client, actor string, limit
 	return items, nil
 }
 
+func formatTimestampAt(iso string, now time.Time) string {
+	if iso == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, iso)
+	if err != nil {
+		if len(iso) > 10 {
+			return iso[:10]
+		}
+		return iso
+	}
+	d := now.Sub(t)
+	switch {
+	case d < 0:
+		return t.Format("2006-01-02")
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	default:
+		return t.Format("2006-01-02")
+	}
+}
+
 func FormatPost(item FeedItem, imgCursor int, wrapWidth int, maxTextLines int) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("─── %s (@%s) ───\n", item.AuthorDisplayName, item.AuthorHandle))
-	b.WriteString(fmt.Sprintf("❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, item.CreatedAt))
+	fmt.Fprintf(&b, "❤️ %d  💬 %d  📅 %s\n", item.LikeCount, item.ReplyCount, formatTimestampAt(item.CreatedAt, time.Now()))
 	b.WriteString("\n")
 	text := item.Text
 	if wrapWidth > 0 {
@@ -314,9 +346,7 @@ func FormatPostListItem(post PostInfo, cursor bool, wrapWidth int) string {
 	if createdAt == "" {
 		createdAt = post.CreatedAt
 	}
-	if len(createdAt) > 10 {
-		createdAt = createdAt[:10]
-	}
+	createdAt = formatTimestampAt(createdAt, time.Now())
 
 	author := post.AuthorDisplayName
 	if author == "" {
