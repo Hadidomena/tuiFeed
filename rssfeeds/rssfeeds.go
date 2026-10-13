@@ -3,6 +3,7 @@ package rssfeeds
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -141,7 +142,8 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.input += msg.Text
 		} else if msg.String() == "backspace" {
 			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
+				_, size := utf8.DecodeLastRuneInString(m.input)
+				m.input = m.input[:len(m.input)-size]
 			}
 		}
 	}
